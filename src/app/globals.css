@@ -1,27 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --primary: #1e3a5f;
+    --primary-hover: #162d4a;
+    --primary-light: #e8eef6;
+    --accent: #f59e0b;
+    --accent-hover: #d97706;
+    --background: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --success: #16a34a;
+    --success-bg: #f0fdf4;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --warning: #d97706;
+    --warning-bg: #fffbeb;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* Prevent Safari Auto-Zoom */
+  input, select, textarea {
+    font-size: 16px;
   }
 }
 
-body {
-  color: var(--foreground);
+/* Safari specific smooth scrolling */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+}
+
+.exam-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh; /* fallback */
+  height: 100dvh; /* dvh for Safari dynamic viewport */
+  overflow: hidden;
+  z-index: 9999;
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+  display: grid;
+  grid-template-rows: 56px 1fr 48px; /* header, content, footer */
+  grid-template-columns: 1fr 280px; /* main, sidebar */
 }

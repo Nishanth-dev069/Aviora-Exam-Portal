@@ -1,3 +1,17 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "overrides": [
+    {
+      "files": ["src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Identifier[name='SUPABASE_SERVICE_ROLE_KEY']",
+            "message": "SUPABASE_SERVICE_ROLE_KEY is strictly forbidden in client-side directories."
+          }
+        ]
+      }
+    }
+  ]
 }
