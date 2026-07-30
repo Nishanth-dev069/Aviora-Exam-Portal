@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Users, Trophy, BookOpen, Activity, Loader2, Search, ChevronDown, ChevronUp, CheckCircle2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { Skeleton, MetricCardSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 
 type ExamAttempt = {
   id: string;
@@ -70,8 +71,23 @@ export default function BatchDetails({ batchId }: { batchId: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="space-y-8 animate-pulse p-4 md:p-8">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48 rounded" />
+            <Skeleton className="h-4 w-32 rounded" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+        </div>
+
+        <TableSkeleton rows={5} cols={5} />
       </div>
     );
   }

@@ -9,7 +9,20 @@ import { redirect } from 'next/navigation';
 const StudentAnalytics = nextDynamic(
   () => import('@/components/student/StudentAnalytics').then(mod => mod.StudentAnalytics),
   {
-    loading: () => <div className="h-64 bg-surface border border-border animate-pulse rounded-xl" />,
+    loading: () => (
+      <div className="bg-surface border border-border rounded-xl p-6 space-y-6 animate-pulse shadow-sm">
+        <div className="flex items-center justify-between border-b border-border pb-4">
+          <Skeleton className="h-6 w-44 rounded" />
+          <Skeleton className="h-5 w-24 rounded-full" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+        </div>
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </div>
+    ),
   }
 );
 

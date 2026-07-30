@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Search, MoreHorizontal, ShieldAlert, CheckCircle2, XCircle, Loader2, ChevronUp, ChevronDown, ChevronsUpDown, Shield, BarChart2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { parseISO } from 'date-fns';
 import { SessionActionsMenu } from './monitoring/SessionActionsMenu';
 
@@ -427,12 +428,17 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading && data.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-text-muted">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    Loading live session monitoring...
-                  </td>
-                </tr>
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-36 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-5 w-24 rounded-full" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
+                  </tr>
+                ))
               ) : sortedStudents.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-text-muted font-medium">

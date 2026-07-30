@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Filter, MoreHorizontal, UserPlus, ChevronLeft, ChevronRight, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/Skeleton';
 import CreateStudentModal from './CreateStudentModal';
 import EditStudentModal from './EditStudentModal';
 import ResetPasswordModal from './ResetPasswordModal';
@@ -224,11 +225,6 @@ export default function StudentList() {
 
       {/* Table */}
       <div className="bg-surface border-x border-b border-border rounded-b-xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
-        {isLoading && (
-          <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -242,7 +238,25 @@ export default function StudentList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {students.map((student) => {
+              {isLoading ? (
+                [...Array(6)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4 flex items-center gap-3">
+                      <Skeleton className="h-9 w-9 rounded-full shrink-0" />
+                      <div className="space-y-1.5 flex-1">
+                        <Skeleton className="h-4 w-32 rounded" />
+                        <Skeleton className="h-3 w-40 rounded" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-6 w-6 rounded" /></td>
+                  </tr>
+                ))
+              ) : (
+                students.map((student) => {
                 const isActive = student.users?.status === 'active';
                 const lastActiveTime = (student as any).last_active_at || (student.users as any)?.last_active_at || student.users?.last_login || null;
                 
@@ -287,7 +301,8 @@ export default function StudentList() {
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
               {students.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-text-muted">

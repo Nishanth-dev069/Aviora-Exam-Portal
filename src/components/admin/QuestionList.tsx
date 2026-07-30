@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Filter, MoreHorizontal, Plus, ChevronLeft, ChevronRight, Loader2, BookOpen, Download, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/Skeleton';
 import Link from 'next/link';
 import QuestionEditor from './QuestionEditor';
 
@@ -153,11 +154,6 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
 
       {/* Table */}
       <div className="bg-surface border-x border-b border-border rounded-b-xl overflow-hidden shadow-sm flex-1 flex flex-col relative min-h-[400px]">
-        {isLoading && (
-          <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        )}
         <div className="overflow-x-auto flex-1">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -171,7 +167,19 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {questions.map((q, idx) => {
+              {isLoading ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-6 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-64 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                    <td className="px-6 py-4 text-center"><Skeleton className="h-4 w-12 mx-auto rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-6 w-6 rounded" /></td>
+                  </tr>
+                ))
+              ) : (
+                questions.map((q, idx) => {
                 const displayIndex = (page - 1) * pageSize + idx + 1;
                 
                 return (
@@ -233,7 +241,8 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
               {questions.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-text-muted">

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Download, Loader2, Target, Users, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { Skeleton, MetricCardSkeleton } from '@/components/ui/Skeleton';
 
 interface StudentResultItem {
   rank: number;
@@ -248,9 +249,28 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
       )}
 
       {isLoading && (
-        <div className="py-20 flex flex-col items-center justify-center text-text-muted">
-          <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
-          <p className="font-medium text-sm">Compiling comprehensive exam analytics...</p>
+        <div className="space-y-8 animate-pulse pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-surface border border-border rounded-2xl p-6 space-y-4">
+              <Skeleton className="h-6 w-48 rounded" />
+              <Skeleton className="h-64 w-full rounded-xl" />
+            </div>
+            <div className="bg-surface border border-border rounded-2xl p-6 space-y-4">
+              <Skeleton className="h-6 w-36 rounded" />
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

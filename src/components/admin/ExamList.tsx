@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Archive, ChevronLeft, ChevronRight, Loader2, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export type ExamType = { 
   id: string; 
@@ -13,6 +14,7 @@ export type ExamType = {
   duration_minutes: number;
   total_questions: number;
   status: string;
+  scheduled_at?: string;
   question_banks?: { name: string };
   created_at: string;
 };
@@ -90,11 +92,6 @@ export default function ExamList() {
       </div>
 
       <div className="bg-surface border-x border-b border-border rounded-b-xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
-        {isLoading && (
-          <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        )}
         <div className="overflow-x-auto min-h-[400px]">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -103,54 +100,72 @@ export default function ExamList() {
                 <th className="px-6 py-4 font-semibold">Type</th>
                 <th className="px-6 py-4 font-semibold">Subject</th>
                 <th className="px-6 py-4 font-semibold">Details</th>
+                <th className="px-6 py-4 font-semibold">Scheduled</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold w-16"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {exams.map((exam) => (
-                <tr 
-                  key={exam.id} 
-                  onClick={() => router.push(`/admin/exams/${exam.id}`)}
-                  className="hover:bg-surface-2/50 transition-colors cursor-pointer group"
-                >
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
-                      {exam.title}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium capitalize text-text-secondary">
-                    {exam.type}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-text-secondary font-medium">
-                    {exam.subject}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-text-secondary">
-                    {exam.total_questions} Qs | {exam.duration_minutes}m
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    {getStatusBadge(exam.status)}
-                  </td>
-                  <td className="px-6 py-4 relative" onClick={(e) => e.stopPropagation()}>
-                    <button 
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!confirm(`Are you sure you want to archive "${exam.title}"?`)) return;
-                        await fetch(`/api/admin/exams/${exam.id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ action: 'archive' })
-                        });
-                        fetchExams();
-                      }}
-                      title="Archive Exam"
-                      className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
-                    >
-                      <Archive className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {isLoading ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-48 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-5 w-20 rounded-full" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-32 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-36 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-6 w-6 rounded" /></td>
+                  </tr>
+                ))
+              ) : (
+                exams.map((exam) => (
+                  <tr 
+                    key={exam.id} 
+                    onClick={() => router.push(`/admin/exams/${exam.id}`)}
+                    className="hover:bg-surface-2/50 transition-colors cursor-pointer group"
+                  >
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
+                        {exam.title}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium capitalize text-text-secondary">
+                      {exam.type}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-text-secondary font-medium">
+                      {exam.subject}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-text-secondary">
+                      {exam.total_questions} Qs | {exam.duration_minutes}m
+                    </td>
+                    <td className="px-6 py-4 text-sm text-text-secondary">
+                      {exam.scheduled_at ? new Date(exam.scheduled_at).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {getStatusBadge(exam.status)}
+                    </td>
+                    <td className="px-6 py-4 relative" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm(`Are you sure you want to archive "${exam.title}"?`)) return;
+                          await fetch(`/api/admin/exams/${exam.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'archive' })
+                          });
+                          fetchExams();
+                        }}
+                        title="Archive Exam"
+                        className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
               {exams.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-text-muted">

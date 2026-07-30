@@ -10,6 +10,7 @@ import { useAntiCheat } from '@/lib/security/anti-cheat';
 import { db, IDBAnswer } from '@/lib/db';
 import { SyncEngine } from '@/lib/exam/sync-engine';
 import { Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { createBrowserClient } from '@supabase/ssr';
 
 import ExamLayout from '@/components/exam/ExamLayout';
@@ -381,8 +382,55 @@ export default function ExamPage() {
 
   if (state === 'loading' || !session || questions.length === 0) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background flex flex-col animate-pulse">
+        {/* Top Header Skeleton */}
+        <header className="h-16 border-b border-border bg-surface px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-6 w-40 rounded" />
+            <Skeleton className="h-5 w-24 rounded-full" />
+          </div>
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-8 w-32 rounded-lg" />
+            <Skeleton className="h-9 w-24 rounded-lg" />
+          </div>
+        </header>
+
+        {/* Main Content Area Skeleton */}
+        <div className="flex-1 flex overflow-hidden p-6 gap-6 max-w-[1600px] w-full mx-auto">
+          {/* Question Panel */}
+          <div className="flex-1 bg-surface border border-border rounded-xl p-8 flex flex-col space-y-6">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <Skeleton className="h-6 w-32 rounded" />
+              <Skeleton className="h-5 w-20 rounded-md" />
+            </div>
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-full rounded" />
+              <Skeleton className="h-5 w-3/4 rounded" />
+            </div>
+            <div className="space-y-4 pt-4 flex-1">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="p-4 border border-border rounded-xl flex items-center gap-4">
+                  <Skeleton className="h-5 w-5 rounded-full shrink-0" />
+                  <Skeleton className="h-4 flex-1 rounded" />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between border-t border-border pt-4">
+              <Skeleton className="h-10 w-28 rounded-lg" />
+              <Skeleton className="h-10 w-28 rounded-lg" />
+            </div>
+          </div>
+
+          {/* Palette Sidebar Skeleton */}
+          <div className="w-80 bg-surface border border-border rounded-xl p-6 hidden lg:flex flex-col space-y-6">
+            <Skeleton className="h-5 w-36 rounded" />
+            <div className="grid grid-cols-5 gap-2.5">
+              {[...Array(20)].map((_, i) => (
+                <Skeleton key={i} className="h-10 w-10 rounded-lg" />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

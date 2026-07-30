@@ -86,7 +86,6 @@ export async function POST(request: Request) {
 
     if (profileError || !userProfile) {
       console.error("Login API Error - Profile Fetch Failed:", { userId, profileError });
-      await supabaseAnon.auth.signOut();
       return NextResponse.json(
         { error: 'User profile not found' },
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
@@ -94,51 +93,94 @@ export async function POST(request: Request) {
     }
 
     if (userProfile.status === 'suspended' || userProfile.status === 'deactivated' || userProfile.deleted_at !== null) {
-      await supabaseAnon.auth.signOut();
       return NextResponse.json(
         { error: 'Account suspended. Contact admin.' },
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
-    // Terminate existing active sessions for this user (single device enforcement)
-    await supabaseAdmin
+    // STEP 4: Terminate ALL existing active sessions for this user FIRST (before creating new one)
+    const { error: terminateError } = await supabaseAdmin
       .from('active_sessions')
       .update({
         status: 'terminated',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
       .eq('status', 'active');
 
-    // Issue unique session token
+    if (terminateError) {
+      console.error('[Login] Failed to terminate old sessions:', terminateError);
+      // Non-fatal — continue
+    }
+
+    // STEP 5: Write audit log for terminated sessions (fire and forget)
+    void (async () => {
+      try {
+        await supabaseAdmin.from('audit_logs').insert({
+          actor_id: userId,
+          actor_role: userProfile.role,
+          action: 'student.session_terminated',
+          resource_type: 'active_session',
+          resource_id: null,
+          metadata: { reason: 'new_login', device_info: { user_agent: userAgent, ip: ipAddress } },
+          ip_address: ipAddress.split(',')[0],
+        });
+      } catch (err) {
+        console.error('[Login Audit Error - Terminate]', err);
+      }
+    })();
+
+    // STEP 6: Create new active_sessions row for Device B (after terminating all old ones)
     const sessionToken = crypto.randomUUID();
     const tokenHash = await hashToken(sessionToken);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(
+      authData.session.expires_at ? authData.session.expires_at * 1000 : Date.now() + 24 * 60 * 60 * 1000
+    ).toISOString();
 
-    await supabaseAdmin.from('active_sessions').insert({
-      user_id: userId,
-      token_hash: tokenHash,
-      device_info: {
-        user_agent: userAgent,
-        ip: ipAddress,
-      },
-      ip_address: ipAddress.split(',')[0],
-      status: 'active',
-      last_active_at: new Date().toISOString(),
-      expires_at: expiresAt,
-    });
+    const { data: newSession, error: sessionError } = await supabaseAdmin
+      .from('active_sessions')
+      .insert({
+        user_id: userId,
+        token_hash: tokenHash,
+        device_info: {
+          user_agent: userAgent,
+          ip: ipAddress,
+        },
+        ip_address: ipAddress.split(',')[0],
+        status: 'active',
+        last_active_at: new Date().toISOString(),
+        expires_at: expiresAt,
+      })
+      .select('id')
+      .single();
 
-    // Write audit log
-    await supabaseAdmin.from('audit_logs').insert({
-      actor_id: userId,
-      actor_role: userProfile.role,
-      action: 'student.login',
-      resource_type: 'user',
-      resource_id: userId,
-      ip_address: ipAddress.split(',')[0],
-    });
+    if (sessionError || !newSession) {
+      console.error('[Login] Failed to create active session:', sessionError);
+      return NextResponse.json(
+        { error: 'Session creation failed' },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
 
+    // STEP 7: Write login audit log (fire and forget)
+    void (async () => {
+      try {
+        await supabaseAdmin.from('audit_logs').insert({
+          actor_id: userId,
+          actor_role: userProfile.role,
+          action: 'student.login',
+          resource_type: 'user',
+          resource_id: userId,
+          metadata: { device_info: { user_agent: userAgent, ip: ipAddress }, new_session_id: newSession.id },
+          ip_address: ipAddress.split(',')[0],
+        });
+      } catch (err) {
+        console.error('[Login Audit Error - Login]', err);
+      }
+    })();
+
+    // STEP 8: Return success & synchronize cookies
     const response = NextResponse.json(
       {
         success: true,
@@ -151,6 +193,7 @@ export async function POST(request: Request) {
         session: {
           access_token: authData.session.access_token,
           refresh_token: authData.session.refresh_token,
+          expires_at: authData.session.expires_at,
         },
       },
       {
@@ -159,7 +202,11 @@ export async function POST(request: Request) {
       }
     );
 
-    // Set session token as HttpOnly, Secure, SameSite=Strict cookie
+    // Sync cookies from store and set session token cookie
+    cookieStore.getAll().forEach((c) => {
+      response.cookies.set(c.name, c.value);
+    });
+
     response.cookies.set('aviora_session_token', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

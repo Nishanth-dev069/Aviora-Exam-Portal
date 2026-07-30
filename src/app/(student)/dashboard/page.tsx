@@ -7,6 +7,7 @@ import { AlertCircle, FileText, ChevronRight, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { ScheduledExamCard, PracticeExamCard, formatDate } from '@/components/student/ExamCards';
+import { Skeleton, CardSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 
 interface DashboardData {
   serverTime?: string;
@@ -121,14 +122,49 @@ export default function StudentDashboard() {
 
   if (loading && !data) {
     return (
-      <div className="animate-pulse space-y-8 max-w-7xl mx-auto p-4 md:p-8">
-        <div className="h-12 bg-surface rounded-lg w-full max-w-3xl"></div>
-        <div className="h-40 bg-surface rounded-lg w-full"></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="h-32 bg-surface rounded-lg"></div>
-          <div className="h-32 bg-surface rounded-lg"></div>
-          <div className="h-32 bg-surface rounded-lg"></div>
-          <div className="h-32 bg-surface rounded-lg"></div>
+      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-10 pb-12 animate-pulse">
+        {/* Banner Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-6 gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64 rounded-lg" />
+            <Skeleton className="h-4 w-40 rounded-md" />
+          </div>
+          <Skeleton className="h-8 w-32 rounded-full self-start sm:self-center" />
+        </div>
+
+        {/* Scheduled Exams Section Skeleton */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-36 rounded" />
+            <Skeleton className="h-4 w-16 rounded" />
+          </div>
+          <div className="space-y-4">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        </div>
+
+        {/* Practice Exams Section Skeleton */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-44 rounded" />
+            <Skeleton className="h-4 w-16 rounded" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        </div>
+
+        {/* Recent Results Section Skeleton */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-32 rounded" />
+            <Skeleton className="h-4 w-16 rounded" />
+          </div>
+          <TableSkeleton rows={3} cols={4} />
         </div>
       </div>
     );

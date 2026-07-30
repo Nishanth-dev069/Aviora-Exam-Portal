@@ -6,6 +6,7 @@ import { ArrowLeft, Clock, Target, Users, BookOpen, ShieldAlert, Archive, Trash2
 import Link from 'next/link';
 import EditExamModal from '@/components/admin/EditExamModal';
 import { ManageEnrollmentsModal } from '@/components/admin/exams/ManageEnrollmentsModal';
+import { Skeleton, MetricCardSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 
 type ExamData = {
   id: string;
@@ -103,8 +104,26 @@ export default function ExamDetail({ examId }: { examId: string }) {
 
   if (isLoading && !exam) {
     return (
-      <div className="flex h-full items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="space-y-8 animate-pulse p-4 md:p-8">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-64 rounded" />
+            <Skeleton className="h-4 w-40 rounded" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+        </div>
+
+        <div className="space-y-4">
+          <Skeleton className="h-6 w-36 rounded" />
+          <TableSkeleton rows={4} cols={4} />
+        </div>
       </div>
     );
   }

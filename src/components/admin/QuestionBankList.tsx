@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 const createBankSchema = z.object({
   name: z.string().min(1, 'Bank name is required'),
@@ -241,11 +242,6 @@ export default function QuestionBankList() {
       </div>
 
       <div className="bg-surface border-x border-b border-border rounded-b-xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
-        {isLoading && (
-          <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -258,7 +254,18 @@ export default function QuestionBankList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {banks.map((bank) => (
+              {isLoading ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-44 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-6 w-6 rounded" /></td>
+                  </tr>
+                ))
+              ) : (
+                banks.map((bank) => (
                 <tr 
                   key={bank.id} 
                   onClick={() => router.push(`/admin/question-banks/${bank.id}/questions`)}
@@ -297,7 +304,8 @@ export default function QuestionBankList() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              ))
+            )}
               {banks.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-text-muted">

@@ -2,12 +2,12 @@ import { createBrowserClient } from '@supabase/ssr';
 
 export async function clearAuthState(): Promise<void> {
   try {
-    // 1. Sign out from Supabase
+    // 1. Sign out locally from Supabase (scope: 'local' to avoid revoking session on other devices)
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   } catch {
     // Best effort
   }

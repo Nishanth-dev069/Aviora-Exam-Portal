@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         ip_address: request.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1',
       });
 
-      await supabaseAnon.auth.signOut();
+      await supabaseAnon.auth.signOut({ scope: 'local' });
     }
 
     const response = NextResponse.json({ success: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });

@@ -109,7 +109,6 @@ export async function middleware(req: NextRequest) {
     .single();
 
   if (userError || !dbUser) {
-    await supabase.auth.signOut();
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('error', 'session_invalid');
     const redirectRes = NextResponse.redirect(loginUrl);
@@ -119,7 +118,6 @@ export async function middleware(req: NextRequest) {
 
   // 7. Account Status Check (suspended or deleted)
   if (dbUser.deleted_at !== null || dbUser.status === 'suspended' || dbUser.status === 'deactivated') {
-    await supabase.auth.signOut();
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('error', 'account_suspended');
     const redirectRes = NextResponse.redirect(loginUrl);
@@ -132,7 +130,12 @@ export async function middleware(req: NextRequest) {
     const sessionToken = req.cookies.get('aviora_session_token')?.value;
 
     if (!sessionToken) {
-      await supabase.auth.signOut();
+      if (isApi) {
+        return NextResponse.json(
+          { error: { code: 'UNAUTHORIZED', message: 'Session token missing.' } },
+          { status: 401 }
+        );
+      }
       const loginUrl = new URL('/login', req.url);
       loginUrl.searchParams.set('error', 'session_invalid');
       const redirectRes = NextResponse.redirect(loginUrl);
@@ -148,33 +151,35 @@ export async function middleware(req: NextRequest) {
       .eq('user_id', user.id)
       .eq('token_hash', tokenHash)
       .eq('status', 'active')
+      .gt('expires_at', new Date().toISOString())
       .maybeSingle();
 
     if (!activeSession) {
-      if (isApi) {
-        return NextResponse.json(
-          { error: { code: 'SESSION_TERMINATED', message: 'Your session was terminated because you logged in elsewhere.' } },
-          { status: 401 }
-        );
-      }
-      await supabase.auth.signOut();
-      const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('error', 'session_terminated');
-      const redirectRes = NextResponse.redirect(loginUrl);
-      redirectRes.cookies.delete('aviora_session_token');
-      return redirectRes;
-    }
+      // Check if session was explicitly terminated
+      const { data: terminatedSession } = await supabaseAdmin
+        .from('active_sessions')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('token_hash', tokenHash)
+        .eq('status', 'terminated')
+        .maybeSingle();
 
-    if (new Date(activeSession.expires_at) < new Date()) {
+      const isTerminated = !!terminatedSession;
+      const errorCode = isTerminated ? 'SESSION_TERMINATED' : 'UNAUTHORIZED';
+      const errorReason = isTerminated ? 'session_terminated' : 'session_invalid';
+      const errorMessage = isTerminated
+        ? 'Your session was terminated because you logged in on another device.'
+        : 'Session not found or invalid.';
+
       if (isApi) {
         return NextResponse.json(
-          { error: { code: 'SESSION_EXPIRED', message: 'Your session has expired.' } },
+          { error: { code: errorCode, message: errorMessage } },
           { status: 401 }
         );
       }
-      await supabase.auth.signOut();
+
       const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('error', 'session_expired');
+      loginUrl.searchParams.set('error', errorReason);
       const redirectRes = NextResponse.redirect(loginUrl);
       redirectRes.cookies.delete('aviora_session_token');
       return redirectRes;

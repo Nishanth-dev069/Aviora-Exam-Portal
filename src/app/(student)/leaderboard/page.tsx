@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Trophy, Medal, Users } from 'lucide-react';
+import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton';
 
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) return (
@@ -40,12 +41,10 @@ export default function LeaderboardPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-4 animate-pulse">
-        <div className="h-8 w-48 rounded-lg bg-surface-2" />
-        <div className="h-4 w-32 rounded bg-surface-2" />
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="h-16 rounded-xl bg-surface-2" />
-        ))}
+      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 animate-pulse">
+        <Skeleton className="h-8 w-48 rounded-lg" />
+        <Skeleton className="h-4 w-32 rounded-md" />
+        <TableSkeleton rows={6} cols={5} />
       </div>
     );
   }
