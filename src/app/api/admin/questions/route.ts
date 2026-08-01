@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   }
   
   if (difficultyFilter && difficultyFilter !== 'all') {
-    query = query.eq('difficulty', difficultyFilter);
+    query = query.ilike('difficulty', difficultyFilter);
   }
 
   query = query.order(sortBy, { ascending: sortOrder === 'asc' });

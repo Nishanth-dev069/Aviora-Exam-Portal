@@ -133,9 +133,9 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
               className="bg-transparent text-sm font-medium text-text-secondary focus:outline-none"
             >
               <option value="all">All Difficulties</option>
-              <option value="Easy">Easy</option>
-              <option value="Medium">Medium</option>
-              <option value="Hard">Hard</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
             </select>
           </div>
         </div>
@@ -181,6 +181,7 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
               ) : (
                 questions.map((q, idx) => {
                 const displayIndex = (page - 1) * pageSize + idx + 1;
+                const diffLower = q.difficulty?.toLowerCase();
                 
                 return (
                   <tr key={q.id} className="hover:bg-surface-2/50 transition-colors">
@@ -197,10 +198,11 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span className={cn(
-                        'inline-flex px-2 py-0.5 rounded text-xs font-bold',
-                        q.difficulty === 'Easy' ? 'bg-success/10 text-success' :
-                        q.difficulty === 'Medium' ? 'bg-warning/10 text-warning-dark' :
-                        'bg-danger/10 text-danger'
+                        'inline-flex px-2 py-0.5 rounded text-xs font-bold capitalize',
+                        diffLower === 'easy' ? 'bg-success/10 text-success' :
+                        diffLower === 'medium' ? 'bg-warning/10 text-warning-dark' :
+                        diffLower === 'hard' ? 'bg-danger/10 text-danger' :
+                        'bg-surface-2 text-text-secondary'
                       )}>
                         {q.difficulty}
                       </span>

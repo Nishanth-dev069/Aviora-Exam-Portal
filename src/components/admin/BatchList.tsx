@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 // --- CREATE BATCH MODAL ---
 const createBatchSchema = z.object({
@@ -160,44 +161,63 @@ export default function BatchList() {
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 relative">
-        {isLoading && (
+        {isLoading && batches.length > 0 && (
           <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         )}
         
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
-          {batches.map(batch => (
-            <div 
-              key={batch.id} 
-              onClick={() => router.push(`/admin/batches/${batch.id}`)}
-              className="bg-surface border border-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{batch.name}</h3>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleArchive(batch.id, batch.name); }}
-                  title="Archive Batch"
-                  className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  <Archive className="w-4 h-4" />
-                </button>
+        {isLoading && batches.length === 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="rounded-2xl border border-border bg-surface p-6 space-y-4 animate-pulse shadow-sm">
+                <div className="flex justify-between items-start">
+                  <Skeleton className="h-6 w-36 rounded-md" />
+                  <Skeleton className="h-6 w-8 rounded-lg" />
+                </div>
+                <Skeleton className="h-4 w-full rounded-md" />
+                <Skeleton className="h-4 w-2/3 rounded-md" />
+                <div className="pt-4 flex justify-between items-center border-t border-border">
+                  <Skeleton className="h-4 w-20 rounded-md" />
+                  <Skeleton className="h-6 w-12 rounded-full" />
+                </div>
               </div>
-              <p className="text-sm text-text-secondary line-clamp-2 mb-6 flex-1">
-                {batch.description || 'No description provided.'}
-              </p>
-              <div className="flex items-center justify-between pt-4 border-t border-border">
-                <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Students</span>
-                <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold">{batch.student_count}</span>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
+            {batches.map(batch => (
+              <div 
+                key={batch.id} 
+                onClick={() => router.push(`/admin/batches/${batch.id}`)}
+                className="bg-surface border border-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col cursor-pointer"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{batch.name}</h3>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleArchive(batch.id, batch.name); }}
+                    title="Archive Batch"
+                    className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Archive className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-sm text-text-secondary line-clamp-2 mb-6 flex-1">
+                  {batch.description || 'No description provided.'}
+                </p>
+                <div className="flex items-center justify-between pt-4 border-t border-border">
+                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Students</span>
+                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold">{batch.student_count}</span>
+                </div>
               </div>
-            </div>
-          ))}
-          {batches.length === 0 && !isLoading && (
-            <div className="col-span-full py-12 text-center text-text-muted">
-              No batches found.
-            </div>
-          )}
-        </div>
+            ))}
+            {batches.length === 0 && !isLoading && (
+              <div className="col-span-full py-12 text-center text-text-muted">
+                No batches found.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {totalCount > 0 && (
