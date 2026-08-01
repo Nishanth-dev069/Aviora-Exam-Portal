@@ -21,8 +21,9 @@ function computeExamAvailability(exam: any, nowIso: string): boolean {
   return false;
 }
 
-export async function GET() {
-  const tRouteStart = performance.now();
+export async function GET(request: Request) {
+  const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
+  const tRouteStart = ENABLE_PROFILING ? performance.now() : 0;
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -37,9 +38,9 @@ export async function GET() {
     );
 
     // Optimization 1: Use getSession() instead of getUser()
-    const tAuthStart = performance.now();
+    const tAuthStart = ENABLE_PROFILING ? performance.now() : 0;
     const { data: { session }, error: authError } = await supabase.auth.getSession();
-    const tAuthEnd = performance.now();
+    const tAuthEnd = ENABLE_PROFILING ? performance.now() : 0;
     const user = session?.user ?? null;
     if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
@@ -57,14 +58,16 @@ export async function GET() {
     );
 
     // Optimization 2: Call consolidated RPC function
-    const tRpcStart = performance.now();
+    const tRpcStart = ENABLE_PROFILING ? performance.now() : 0;
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('student_get_dashboard');
-    const tRpcEnd = performance.now();
-    const rpcMs = tRpcEnd - tRpcStart;
-    const authMs = tAuthEnd - tAuthStart;
-    const totalMs = performance.now() - tRouteStart;
+    const tRpcEnd = ENABLE_PROFILING ? performance.now() : 0;
+    const rpcMs = ENABLE_PROFILING ? tRpcEnd - tRpcStart : 0;
+    const authMs = ENABLE_PROFILING ? tAuthEnd - tAuthStart : 0;
 
-    console.log(`[Dashboard API Telemetry] total=${totalMs.toFixed(1)}ms auth=${authMs.toFixed(1)}ms rpc=${rpcMs.toFixed(1)}ms fallback=${!!rpcError}`);
+    if (ENABLE_PROFILING) {
+      const totalMs = performance.now() - tRouteStart;
+      console.log(`[Dashboard API Telemetry] total=${totalMs.toFixed(1)}ms auth=${authMs.toFixed(1)}ms rpc=${rpcMs.toFixed(1)}ms fallback=${!!rpcError}`);
+    }
 
     if (rpcError || !rpcData) {
       // Fallback in case migration RPC is not applied in current DB environment yet
@@ -108,16 +111,29 @@ export async function GET() {
       });
 
       const profileData = profileResult.data;
+      const requestId = request.headers.get('x-request-id') || 'unknown';
+      const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
+
+      if (!profileData) {
+        console.error(`[CRITICAL_IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: fallback student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nError: PROFILE_RESOLUTION_FAILED\nTimestamp: ${new Date().toISOString()}`);
+        return NextResponse.json(
+          { error: { code: 'PROFILE_RESOLUTION_FAILED', message: 'Failed to resolve student profile identity.' } },
+          { status: 500, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
       const batchesData: any = profileData?.batches;
       const nowIso = new Date().toISOString();
+
+      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: fallback student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profileData.full_name}\nTimestamp: ${new Date().toISOString()}`);
 
       return NextResponse.json({
         serverTime: nowIso,
         profile: {
-          id: profileData?.id,
-          full_name: profileData?.full_name || 'Student',
-          roll_number: profileData?.roll_number || 'Unassigned',
-          photo_url: profileData?.photo_url || null,
+          id: profileData.id,
+          full_name: profileData.full_name,
+          roll_number: profileData.roll_number || 'Unassigned',
+          photo_url: profileData.photo_url || null,
           batch_name: (Array.isArray(batchesData) ? batchesData[0]?.name : batchesData?.name) || null,
         },
         practiceExams: practiceExams.map((exam: any) => ({ ...exam, is_available: computeExamAvailability(exam, nowIso) })),
@@ -129,6 +145,17 @@ export async function GET() {
 
     // Unpack RPC payload
     const { profile, practiceExams = [], scheduledExams = [], recentResults = [], sessions = [], sessionResults = [] } = rpcData;
+    const requestId = request.headers.get('x-request-id') || 'unknown';
+    const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
+
+    if (!profile || !profile.full_name) {
+      console.error(`[CRITICAL_IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_get_dashboard RPC\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nError: PROFILE_RESOLUTION_FAILED\nTimestamp: ${new Date().toISOString()}`);
+      return NextResponse.json(
+        { error: { code: 'PROFILE_RESOLUTION_FAILED', message: 'RPC payload missing student profile identity.' } },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
     const nowIso = rpcData.serverTime || new Date().toISOString();
 
     const examStatusMap: Record<string, any> = {};
@@ -164,19 +191,46 @@ export async function GET() {
       is_available: computeExamAvailability(exam, nowIso),
     }));
 
-    return NextResponse.json(
-      {
-        serverTime: nowIso,
-        profile: profile || { full_name: 'Student', roll_number: 'Unassigned', photo_url: null, batch_name: null },
-        practiceExams: enrichedPractice,
-        scheduledExams: enrichedScheduled,
-        recentResults: recentResults || [],
-        examStatusMap,
-      },
-      {
-        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    const tSerStart = performance.now();
+    const payload = {
+      serverTime: nowIso,
+      profile,
+      practiceExams: enrichedPractice,
+      scheduledExams: enrichedScheduled,
+      recentResults: recentResults || [],
+      examStatusMap,
+    };
+    const responseJson = JSON.stringify(payload);
+    const tSerEnd = performance.now();
+    const serMs = tSerEnd - tSerStart;
+    const routeTotalMs = performance.now() - tRouteStart;
+
+    const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
+
+    if (ENABLE_PROFILING) {
+      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_get_dashboard RPC\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profile.full_name}\nTimestamp: ${new Date().toISOString()}`);
+    }
+
+    if (!ENABLE_PROFILING) {
+      return NextResponse.json(payload, {
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+      });
+    }
+
+    const reqHeaders = request.headers;
+    const mwTiming = reqHeaders.get('x-mw-timing') || '';
+    const routeTimingStr = `route_auth;dur=${authMs.toFixed(1)}, route_rpc;dur=${rpcMs.toFixed(1)}, route_ser;dur=${serMs.toFixed(1)}, route_total;dur=${routeTotalMs.toFixed(1)}`;
+    const fullServerTiming = mwTiming ? `${mwTiming}, ${routeTimingStr}, req_id;desc="${requestId}"` : `${routeTimingStr}, req_id;desc="${requestId}"`;
+
+    return new NextResponse(responseJson, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'X-Request-ID': requestId,
+        'Server-Timing': fullServerTiming
       }
-    );
+    });
 
   } catch (err: any) {
     console.error('[GET /api/student/dashboard] Exception:', err);

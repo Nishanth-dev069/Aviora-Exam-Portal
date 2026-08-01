@@ -215,6 +215,12 @@ export async function POST(request: Request) {
       path: '/',
     });
 
+    if (process.env.ENABLE_PROFILING === 'true') {
+      const requestId = request.headers.get('x-request-id') || 'unknown';
+      const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
+      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: auth_login\nOrigin: route_handler\nPath: /api/auth/login\nMethod: POST\nIs RSC: ${isRsc}\nSource: signInWithPassword & users table\nUser ID: ${userProfile.id}\nEmail: ${userProfile.email}\nRole: ${userProfile.role}\nTimestamp: ${new Date().toISOString()}`);
+    }
+
     return response;
   } catch (err) {
     console.error('[Login API Internal Error]', err);

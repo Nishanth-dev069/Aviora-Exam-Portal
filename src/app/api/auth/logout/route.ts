@@ -82,6 +82,12 @@ export async function POST(request: NextRequest) {
       path: '/',
     });
 
+    if (process.env.ENABLE_PROFILING === 'true') {
+      const requestId = request.headers.get('x-request-id') || 'unknown';
+      const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
+      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: auth_logout\nOrigin: route_handler\nPath: /api/auth/logout\nMethod: POST\nIs RSC: ${isRsc}\nSource: Supabase Auth signOut\nUser ID: ${user?.id || 'none'}\nEmail: ${user?.email || 'N/A'}\nTimestamp: ${new Date().toISOString()}`);
+    }
+
     return response;
   } catch (err) {
     console.error('[Logout API Error]', err);

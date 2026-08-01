@@ -47,8 +47,17 @@ export async function middleware(req: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + '/')
   );
 
-  // 4. Create Supabase client that syncs cookies
-  const t0 = performance.now();
+  // --- COMPILE-TIME FEATURE FLAG ---
+  const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
+
+  let requestId = '';
+  let t0 = 0;
+  if (ENABLE_PROFILING) {
+    requestId = req.headers.get('x-request-id') || req.headers.get('x-vercel-id') || crypto.randomUUID();
+    req.headers.set('x-request-id', requestId);
+    t0 = performance.now();
+  }
+
   let res = NextResponse.next({ request: { headers: req.headers } });
 
   const supabase = createServerClient(
@@ -68,12 +77,13 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // 5. Get user session locally in memory (0.10ms)
-  const tGetUserStart = performance.now();
+  // 5. Get user session locally in memory
+  let tGetUserStart = 0;
+  if (ENABLE_PROFILING) tGetUserStart = performance.now();
   const { data: { session } } = await supabase.auth.getSession();
   const user = session?.user ?? null;
-  const tGetUserEnd = performance.now();
-  const getUserMs = tGetUserEnd - tGetUserStart;
+  let getUserMs = 0;
+  if (ENABLE_PROFILING) getUserMs = performance.now() - tGetUserStart;
 
   // If no user session
   if (!user) {
@@ -100,14 +110,15 @@ export async function middleware(req: NextRequest) {
     { cookies: { getAll() { return []; }, setAll() {} } }
   );
 
-  const tUsersStart = performance.now();
+  let tUsersStart = 0;
+  if (ENABLE_PROFILING) tUsersStart = performance.now();
   const { data: dbUser, error: userError } = await supabaseAdmin
     .from('users')
     .select('role, status, deleted_at, force_password_change')
     .eq('id', user.id)
     .single();
-  const tUsersEnd = performance.now();
-  const usersMs = tUsersEnd - tUsersStart;
+  let usersMs = 0;
+  if (ENABLE_PROFILING) usersMs = performance.now() - tUsersStart;
 
   if (userError || !dbUser) {
     const loginUrl = new URL('/login', req.url);
@@ -147,7 +158,8 @@ export async function middleware(req: NextRequest) {
 
     const tokenHash = await hashTokenEdge(sessionToken);
 
-    const tSessionStart = performance.now();
+    let tSessionStart = 0;
+    if (ENABLE_PROFILING) tSessionStart = performance.now();
     const { data: activeSession } = await supabaseAdmin
       .from('active_sessions')
       .select('id, status, expires_at')
@@ -156,8 +168,7 @@ export async function middleware(req: NextRequest) {
       .eq('status', 'active')
       .gt('expires_at', new Date().toISOString())
       .maybeSingle();
-    const tSessionEnd = performance.now();
-    activeSessionMs = tSessionEnd - tSessionStart;
+    if (ENABLE_PROFILING) activeSessionMs = performance.now() - tSessionStart;
 
     if (!activeSession) {
       // Check if session was explicitly terminated
@@ -190,15 +201,23 @@ export async function middleware(req: NextRequest) {
       return redirectRes;
     }
 
-    // Attach verified session ID header for downstream handlers
-    req.headers.set('x-active-session-id', activeSession.id);
+  const requestId = req.headers.get('x-request-id') || req.headers.get('x-vercel-id') || crypto.randomUUID();
+  req.headers.set('x-request-id', requestId);
+  req.headers.set('x-identity-user-id', user.id);
+
+  if (ENABLE_PROFILING) {
+    const isRsc = req.headers.get('rsc') === '1' || (req.headers.get('accept') || '').includes('text/x-component');
+    console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: middleware\nOrigin: middleware\nPath: ${pathname}\nMethod: ${req.method}\nIs RSC: ${isRsc}\nSource: Supabase Auth Session\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: ${dbUser.role}\nTimestamp: ${new Date().toISOString()}`);
+
+    const tTotal = performance.now() - t0;
+    const mwTimingStr = `mw;dur=${tTotal.toFixed(1)}, mw_auth;dur=${getUserMs.toFixed(1)}, mw_users;dur=${usersMs.toFixed(1)}, mw_sessions;dur=${activeSessionMs.toFixed(1)}`;
+    
+    req.headers.set('x-mw-timing', mwTimingStr);
     res = NextResponse.next({ request: { headers: req.headers } });
+    res.headers.set('X-Request-ID', requestId);
+    res.headers.set('Server-Timing', `${mwTimingStr}, req_id;desc="${requestId}"`);
+    console.log(`[PROFILER][X-Request-ID: ${requestId}] path=${pathname} ${mwTimingStr}`);
   }
-
-  const tTotal = performance.now() - t0;
-  console.log(`[Middleware Telemetry] path=${pathname} total=${tTotal.toFixed(1)}ms getUser=${getUserMs.toFixed(1)}ms users=${usersMs.toFixed(1)}ms activeSessions=${activeSessionMs.toFixed(1)}ms`);
-
-  res.headers.set('Server-Timing', `mw;dur=${tTotal.toFixed(1)}, getUser;dur=${getUserMs.toFixed(1)}, users;dur=${usersMs.toFixed(1)}, sessions;dur=${activeSessionMs.toFixed(1)}`);
 
   // 9. Force Password Change
   if (dbUser.force_password_change && pathname !== '/change-password' && !pathname.startsWith('/api/auth')) {
