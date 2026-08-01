@@ -23,9 +23,11 @@ export async function POST(
       }
     );
 
-    const { data: { user } } = await supabaseAnon.auth.getUser();
-    if (!user) return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
-
+    const { data: { session: authSession }, error: authError } = await supabaseAnon.auth.getSession();
+    const user = authSession?.user ?? null;
+    if (authError || !user) {
+      return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
+    } 
     // Verify admin role
     const { data: adminUser } = await supabaseAdmin
       .from('users')

@@ -27,7 +27,7 @@ function CustomBar(props: any) {
   return <rect x={x} y={y} width={width} height={height} fill={fill} rx={4} />;
 }
 
-export function StudentAnalytics() {
+export default function StudentAnalytics() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

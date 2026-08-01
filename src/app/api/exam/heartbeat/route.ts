@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
+    // Optimization 1: Use getSession() instead of getUser()
+    const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+    const user = session?.user ?? null;
 
     if (authError || !user) {
       return NextResponse.json(
@@ -69,12 +71,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update last_active_at to keep session alive
+    // Optimization 3: Fire-and-forget last_active_at update (non-critical)
     const nowIso = new Date().toISOString();
-    await supabaseAdmin
+    supabaseAdmin
       .from('active_sessions')
       .update({ last_active_at: nowIso })
-      .eq('id', activeSession.id);
+      .eq('id', activeSession.id)
+      .then()
+      .catch(console.error);
 
     return NextResponse.json({ valid: true, server_time: nowIso });
   } catch (err: unknown) {
@@ -85,3 +89,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

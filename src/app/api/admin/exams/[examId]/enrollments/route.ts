@@ -11,8 +11,9 @@ async function verifyAdmin() {
     { cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} } }
   );
 
-  const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
-  if (authError || !user) return { error: 'UNAUTHORIZED', status: 401 };
+  const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+  const user = session?.user ?? null;
+  if (authError || !user) return { error: 'Unauthorized', status: 401 };
 
   const { data: userData } = await supabaseAdmin
     .from('users')

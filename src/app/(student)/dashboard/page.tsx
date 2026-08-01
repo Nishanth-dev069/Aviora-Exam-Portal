@@ -49,13 +49,14 @@ export default function StudentDashboard() {
 
   const prevExamAvailability = useRef<Map<string, boolean>>(new Map());
 
-  const fetchDashboardData = useCallback(async (silent = false) => {
+  const fetchDashboardData = useCallback(async (silent = false, signal?: AbortSignal) => {
     if (!silent) setLoading(true);
 
     try {
       const res = await fetch('/api/student/dashboard', {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
+        signal
       });
 
       if (!res.ok) throw new Error('Failed to fetch dashboard data');
@@ -74,6 +75,8 @@ export default function StudentDashboard() {
         prevExamAvailability.current.set(exam.id, isNowAvailable);
       });
 
+      if (signal?.aborted) return;
+
       setData(freshData);
       setError(null);
 
@@ -81,24 +84,31 @@ export default function StudentDashboard() {
         setToastMessage(`📝 Exam "${newlyAvailableExam.title}" is now available to start!`);
         setTimeout(() => setToastMessage(null), 10000);
       }
-    } catch {
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
       if (!silent) setError('Could not load dashboard data.');
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && !signal?.aborted) setLoading(false);
     }
   }, []);
 
   // Initial load
   useEffect(() => {
-    fetchDashboardData(false);
+    const controller = new AbortController();
+    fetchDashboardData(false, controller.signal);
+    return () => controller.abort();
   }, [fetchDashboardData]);
 
   // Standard polling (every 30 seconds)
   useEffect(() => {
+    const controller = new AbortController();
     const interval = setInterval(() => {
-      fetchDashboardData(true);
+      fetchDashboardData(true, controller.signal);
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
   }, [fetchDashboardData]);
 
   // Urgent polling (every 10 seconds) if an exam is scheduled to start within 5 minutes
@@ -113,11 +123,15 @@ export default function StudentDashboard() {
 
     if (!hasImminentExam) return;
 
+    const controller = new AbortController();
     const urgentInterval = setInterval(() => {
-      fetchDashboardData(true);
+      fetchDashboardData(true, controller.signal);
     }, 10000);
 
-    return () => clearInterval(urgentInterval);
+    return () => {
+      clearInterval(urgentInterval);
+      controller.abort();
+    };
   }, [data?.scheduledExams, fetchDashboardData]);
 
   if (loading && !data) {

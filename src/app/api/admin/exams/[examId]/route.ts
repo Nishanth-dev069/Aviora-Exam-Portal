@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { syncExamStatuses } from '@/lib/supabase/syncStatuses';
 
 async function verifyAdmin() {
   const cookieStore = await cookies();
@@ -12,7 +11,8 @@ async function verifyAdmin() {
     { cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} } }
   );
 
-  const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
+  const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+  const user = session?.user ?? null;
   if (authError || !user) return { error: 'Unauthorized', status: 401 };
 
   const { data: userData } = await supabaseAdmin
@@ -33,8 +33,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ exam
   if (auth.error) return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
 
   const { examId } = await params;
-
-  await syncExamStatuses(supabaseAdmin);
 
   // Fetch full exam details
   const { data: exam, error: examError } = await supabaseAdmin
@@ -229,8 +227,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ex
       console.error('[Update Exam Error]', updateError);
       return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: updateError.message } }, { status: 500 });
     }
-
-    await syncExamStatuses(supabaseAdmin);
 
     return NextResponse.json({ success: true, message: 'Exam details updated successfully' });
   }

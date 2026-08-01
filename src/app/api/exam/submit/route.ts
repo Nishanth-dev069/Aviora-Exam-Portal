@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
     
-    // Authenticate request using anon client
+    // Optimization 1: Use getSession() instead of getUser()
     const supabaseAnon = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,7 +24,8 @@ export async function POST(request: Request) {
       }
     );
 
-    const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
+    const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+    const user = session?.user ?? null;
     if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }, { status: 401 });
     }
@@ -48,29 +49,21 @@ export async function POST(request: Request) {
     );
 
     const ip_address = request.headers.get('x-forwarded-for') || '127.0.0.1';
-    
-    // Fetch user role
-    const { data: studentUser } = await supabaseAdmin
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
 
-    // Call the RPC
+    // Optimization 2: Single RPC call to evaluate and submit session
     const { data: resultData, error: rpcError } = await supabaseAdmin.rpc('submit_exam_session', {
       p_session_id: session_id,
       p_student_id: user.id,
       p_submission_token: submission_token,
       p_ip_address: ip_address,
-      p_student_role: studentUser?.role || 'student'
+      p_student_role: 'student'
     });
 
     if (rpcError) {
-      // Parse specific exceptions raised in Postgres
-      if (rpcError.message.includes('Session not found')) {
+      if (rpcError.message.includes('Session not found') || rpcError.message.includes('NOT_FOUND')) {
         return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Session not found or forbidden' } }, { status: 404 });
       }
-      if (rpcError.message.includes('Invalid submission token')) {
+      if (rpcError.message.includes('Invalid submission token') || rpcError.message.includes('INVALID_TOKEN')) {
         return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Invalid submission token' } }, { status: 403 });
       }
       return NextResponse.json({ error: { code: 'SUBMISSION_FAILED', message: 'Failed to submit exam', details: rpcError } }, { status: 500 });
@@ -85,3 +78,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

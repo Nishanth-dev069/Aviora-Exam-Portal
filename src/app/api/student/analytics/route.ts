@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const supabaseAnon = createServerClient(
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
@@ -17,8 +19,10 @@ export async function GET() {
       }
     );
 
-    const { data: { user } } = await supabaseAnon.auth.getUser();
-    if (!user) return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
+    // Optimization 1: getSession() instead of getUser()
+    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+    if (authError || !user) return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
 
     const supabaseAdmin = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,39 +35,26 @@ export async function GET() {
       }
     );
 
-    // Fetch ALL results for this student — with exam metadata
-    const { data: allResults, error } = await supabaseAdmin
-      .from('exam_results')
-      .select(`
-        id,
-        session_id,
-        exam_id,
-        percentage,
-        total_score,
-        max_score,
-        correct_count,
-        incorrect_count,
-        unanswered_count,
-        time_taken_seconds,
-        is_passed,
-        computed_at,
-        exams (
-          id,
-          title,
-          subject,
-          type,
-          total_questions,
-          duration_minutes
-        )
-      `)
-      .eq('student_id', user.id)
-      .order('computed_at', { ascending: true }); // ascending for trend chart
+    // Optimization 2: Call consolidated RPC
+    let allResults: any[] = [];
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('student_get_analytics');
 
-    if (error) {
-      return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: error.message } }, { status: 500 });
+    if (rpcError || !rpcData) {
+      const { data, error } = await supabaseAdmin
+        .from('exam_results')
+        .select('id, session_id, exam_id, percentage, total_score, max_score, correct_count, incorrect_count, unanswered_count, time_taken_seconds, is_passed, computed_at, exams(id, title, subject, type, total_questions, duration_minutes)')
+        .eq('student_id', user.id)
+        .order('computed_at', { ascending: true });
+
+      if (error) {
+        return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: error.message } }, { status: 500 });
+      }
+      allResults = data || [];
+    } else {
+      allResults = rpcData || [];
     }
 
-    const results = allResults || [];
+    const results = allResults;
 
     // === COMPUTED STATS ===
     const totalExamsTaken = results.length;
@@ -79,7 +70,7 @@ export async function GET() {
       ? (scheduledResults.filter(r => r.is_passed === true).length / scheduledResults.length) * 100
       : null;
 
-    // 2. Score trend over time (for line chart)
+    // Score trend over time
     const trendData = results.slice(-20).map((r, idx) => {
       const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
       return {
@@ -95,7 +86,7 @@ export async function GET() {
       };
     });
 
-    // 3. Subject-wise performance (for bar chart)
+    // Subject-wise performance
     const subjectMap: Record<string, { total: number; count: number; best: number }> = {};
     results.forEach(r => {
       const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
@@ -115,7 +106,7 @@ export async function GET() {
       attempts: stats.count,
     })).sort((a, b) => b.average - a.average);
 
-    // 4. Recent detailed results (last 10, for the history table)
+    // Recent detailed results
     const recentResults = [...results].reverse().slice(0, 10).map(r => {
       const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
       return {
@@ -133,7 +124,7 @@ export async function GET() {
       };
     });
 
-    // 5. Accuracy trend
+    // Accuracy trend
     const accuracyTrend = trendData.map(d => ({
       ...d,
       accuracy: d.correct + d.incorrect > 0
@@ -160,3 +151,4 @@ export async function GET() {
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: err.message } }, { status: 500 });
   }
 }
+

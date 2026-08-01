@@ -27,9 +27,11 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    const { data: { user } } = await supabaseAnon.auth.getUser();
+    // Optimization 1: Use getSession() instead of getUser()
+    const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+    const user = session?.user ?? null;
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
     }
 
@@ -56,13 +58,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: { code: 'SESSION_EXPIRED' } }, { status: 401 });
     }
 
+    // Optimization 3: Fire-and-forget last_active_at update
     const nowIso = new Date().toISOString();
-
-    // Update last_active_at for this user's active session
-    await supabaseAdmin
+    supabaseAdmin
       .from('active_sessions')
       .update({ last_active_at: nowIso })
-      .eq('id', activeSession.id);
+      .eq('id', activeSession.id)
+      .then()
+      .catch(console.error);
 
     return NextResponse.json({ valid: true, server_time: nowIso });
   } catch (err: unknown) {
@@ -70,3 +73,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR' } }, { status: 500 });
   }
 }
+

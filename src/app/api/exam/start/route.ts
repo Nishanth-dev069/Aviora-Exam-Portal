@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   try {
     const cookieStore = cookies();
 
-    // 1. Authenticate request using anon client
+    // 1. Authenticate request using getSession()
     const supabaseAnon = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -49,7 +49,8 @@ export async function POST(request: Request) {
       }
     );
 
-    const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
+    const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+    const user = session?.user ?? null;
     if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }, { status: 401 });
     }

@@ -4,7 +4,6 @@ export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { syncExamStatuses } from '@/lib/supabase/syncStatuses';
 
 async function verifyAdmin() {
   const cookieStore = await cookies();
@@ -14,7 +13,8 @@ async function verifyAdmin() {
     { cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} } }
   );
 
-  const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
+  const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+  const user = session?.user ?? null;
   if (authError || !user) return { error: 'Unauthorized', status: 401 };
 
   const supabaseAdmin = createServerClient(
@@ -39,17 +39,17 @@ async function verifyAdmin() {
 export async function GET(request: Request) {
   const auth = await verifyAdmin();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  const supabaseAdmin = auth.supabaseAdmin!;
 
+  const { supabaseAdmin } = auth;
   const { searchParams } = new URL(request.url);
   const examId = searchParams.get('examId');
   const exportType = searchParams.get('export');
 
-  if (!examId) return NextResponse.json({ error: 'Missing examId' }, { status: 400 });
+  if (!examId) {
+    return NextResponse.json({ error: 'Missing examId parameter' }, { status: 400 });
+  }
 
   try {
-    await syncExamStatuses(supabaseAdmin);
-
     // 1. Fetch Exam Meta
     const { data: examData, error: examErr } = await supabaseAdmin
       .from('exams')

@@ -19,8 +19,9 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    const { data: { user } } = await supabaseAnon.auth.getUser();
-    if (!user) {
+    const { data: { session: authSession }, error: authError } = await supabaseAnon.auth.getSession();
+    const user = authSession?.user ?? null;
+    if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
     }
 

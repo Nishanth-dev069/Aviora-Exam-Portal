@@ -14,7 +14,8 @@ async function verifyAdmin() {
     { cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} } }
   );
 
-  const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
+  const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+  const user = session?.user ?? null;
   if (authError || !user) return { error: 'UNAUTHORIZED', status: 401 };
 
   const { data: userData } = await supabaseAdmin
@@ -284,15 +285,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-import { syncExamStatuses } from '@/lib/supabase/syncStatuses';
-
 export async function GET(request: NextRequest) {
   const auth = await verifyAdmin();
   if (auth.error) {
     return NextResponse.json({ error: { code: auth.error } }, { status: auth.status });
   }
-
-  await syncExamStatuses(supabaseAdmin);
 
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get('page') || '1', 10);

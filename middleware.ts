@@ -29,13 +29,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/device-blocked', req.url));
   }
 
-  // 2. Allow static assets and Next.js internals
-  const isStaticAsset =
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/favicon') ||
-    pathname.includes('.');
-
-  if (isStaticAsset) return NextResponse.next();
 
   // 3. Define public routes (including self-authenticating exam endpoints)
   const PUBLIC_ROUTES = [

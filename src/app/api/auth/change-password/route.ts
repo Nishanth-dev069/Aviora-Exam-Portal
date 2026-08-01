@@ -33,7 +33,8 @@ export async function POST(request: Request) {
 
     // Verify current password if provided
     if (current_password) {
-      const { data: { user } } = await supabaseAnon.auth.getUser();
+      const { data: { session } } = await supabaseAnon.auth.getSession();
+      const user = session?.user ?? null;
       if (!user || !user.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       
       const { error: signInError } = await supabaseAnon.auth.signInWithPassword({
@@ -79,15 +80,15 @@ export async function POST(request: Request) {
       .update({ force_password_change: false })
       .eq('id', userId);
 
-    // Write audit log
-    await supabaseAdmin.from('audit_logs').insert({
+    // Write audit log (fire-and-forget)
+    supabaseAdmin.from('audit_logs').insert({
       actor_id: userId,
       actor_role: authData.user.user_metadata?.role || 'student',
       action: 'student.password_changed',
       resource_type: 'user',
       resource_id: userId,
       ip_address: ipAddress,
-    });
+    }).then().catch(console.error);
 
     return NextResponse.json({ success: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch {

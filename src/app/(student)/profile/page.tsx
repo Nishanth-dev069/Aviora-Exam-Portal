@@ -1,30 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import nextDynamic from 'next/dynamic';
 import ProfileCard from '@/components/student/ProfileCard';
 import SecurityCard from '@/components/student/SecurityCard';
 import { redirect } from 'next/navigation';
-
-const StudentAnalytics = nextDynamic(
-  () => import('@/components/student/StudentAnalytics').then(mod => mod.StudentAnalytics),
-  {
-    loading: () => (
-      <div className="bg-surface border border-border rounded-xl p-6 space-y-6 animate-pulse shadow-sm">
-        <div className="flex items-center justify-between border-b border-border pb-4">
-          <Skeleton className="h-6 w-44 rounded" />
-          <Skeleton className="h-5 w-24 rounded-full" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <MetricCardSkeleton />
-          <MetricCardSkeleton />
-          <MetricCardSkeleton />
-        </div>
-        <Skeleton className="h-48 w-full rounded-xl" />
-      </div>
-    ),
-  }
-);
+import StudentAnalytics from '@/components/student/StudentAnalytics';
 
 export const dynamic = 'force-dynamic';
 

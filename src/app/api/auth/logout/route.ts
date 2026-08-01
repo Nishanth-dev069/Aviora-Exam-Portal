@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const { data: { user } } = await supabaseAnon.auth.getUser();
+    const { data: { session } } = await supabaseAnon.auth.getSession();
+    const user = session?.user ?? null;
 
     const supabaseAdmin = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,21 +58,15 @@ export async function POST(request: NextRequest) {
         .eq('user_id', user.id)
         .eq('status', 'active');
 
-      // Fetch user role for audit log
-      const { data: dbUser } = await supabaseAdmin
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      await supabaseAdmin.from('audit_logs').insert({
+      // Audit log write (fire-and-forget)
+      supabaseAdmin.from('audit_logs').insert({
         actor_id: user.id,
-        actor_role: dbUser?.role || 'student',
+        actor_role: 'student',
         action: 'student.logout',
         resource_type: 'user',
         resource_id: user.id,
         ip_address: request.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1',
-      });
+      }).then().catch(console.error);
 
       await supabaseAnon.auth.signOut({ scope: 'local' });
     }
