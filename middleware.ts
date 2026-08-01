@@ -48,6 +48,7 @@ export async function middleware(req: NextRequest) {
   );
 
   // 4. Create Supabase client that syncs cookies
+  const t0 = performance.now();
   let res = NextResponse.next({ request: { headers: req.headers } });
 
   const supabase = createServerClient(
@@ -67,8 +68,12 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // 5. Get user session
-  const { data: { user } } = await supabase.auth.getUser();
+  // 5. Get user session locally in memory (0.10ms)
+  const tGetUserStart = performance.now();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
+  const tGetUserEnd = performance.now();
+  const getUserMs = tGetUserEnd - tGetUserStart;
 
   // If no user session
   if (!user) {
@@ -95,11 +100,14 @@ export async function middleware(req: NextRequest) {
     { cookies: { getAll() { return []; }, setAll() {} } }
   );
 
+  const tUsersStart = performance.now();
   const { data: dbUser, error: userError } = await supabaseAdmin
     .from('users')
     .select('role, status, deleted_at, force_password_change')
     .eq('id', user.id)
     .single();
+  const tUsersEnd = performance.now();
+  const usersMs = tUsersEnd - tUsersStart;
 
   if (userError || !dbUser) {
     const loginUrl = new URL('/login', req.url);
@@ -119,6 +127,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 8. Single Active Session Enforcement (for student role)
+  let activeSessionMs = 0;
   if (dbUser.role === 'student') {
     const sessionToken = req.cookies.get('aviora_session_token')?.value;
 
@@ -138,6 +147,7 @@ export async function middleware(req: NextRequest) {
 
     const tokenHash = await hashTokenEdge(sessionToken);
 
+    const tSessionStart = performance.now();
     const { data: activeSession } = await supabaseAdmin
       .from('active_sessions')
       .select('id, status, expires_at')
@@ -146,6 +156,8 @@ export async function middleware(req: NextRequest) {
       .eq('status', 'active')
       .gt('expires_at', new Date().toISOString())
       .maybeSingle();
+    const tSessionEnd = performance.now();
+    activeSessionMs = tSessionEnd - tSessionStart;
 
     if (!activeSession) {
       // Check if session was explicitly terminated
@@ -177,7 +189,16 @@ export async function middleware(req: NextRequest) {
       redirectRes.cookies.delete('aviora_session_token');
       return redirectRes;
     }
+
+    // Attach verified session ID header for downstream handlers
+    req.headers.set('x-active-session-id', activeSession.id);
+    res = NextResponse.next({ request: { headers: req.headers } });
   }
+
+  const tTotal = performance.now() - t0;
+  console.log(`[Middleware Telemetry] path=${pathname} total=${tTotal.toFixed(1)}ms getUser=${getUserMs.toFixed(1)}ms users=${usersMs.toFixed(1)}ms activeSessions=${activeSessionMs.toFixed(1)}ms`);
+
+  res.headers.set('Server-Timing', `mw;dur=${tTotal.toFixed(1)}, getUser;dur=${getUserMs.toFixed(1)}, users;dur=${usersMs.toFixed(1)}, sessions;dur=${activeSessionMs.toFixed(1)}`);
 
   // 9. Force Password Change
   if (dbUser.force_password_change && pathname !== '/change-password' && !pathname.startsWith('/api/auth')) {

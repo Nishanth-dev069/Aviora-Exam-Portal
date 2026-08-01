@@ -14,6 +14,7 @@ async function hashToken(token: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const tRouteStart = performance.now();
   try {
     const cookieStore = await cookies();
     const supabaseAnon = createServerClient(
@@ -28,7 +29,9 @@ export async function POST(request: NextRequest) {
     );
 
     // Optimization 1: Use getSession() instead of getUser()
+    const tAuthStart = performance.now();
     const { data: { session }, error: authError } = await supabaseAnon.auth.getSession();
+    const tAuthEnd = performance.now();
     const user = session?.user ?? null;
 
     if (authError || !user) {
@@ -38,37 +41,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sessionToken = cookieStore.get('aviora_session_token')?.value;
-    if (!sessionToken) {
-      return NextResponse.json(
-        { error: { code: 'SESSION_TERMINATED', message: 'Session token missing.' } },
-        { status: 401 }
-      );
-    }
+    const verifiedActiveSessionId = request.headers.get('x-active-session-id');
+    let activeSessionId = verifiedActiveSessionId;
 
-    const tokenHash = await hashToken(sessionToken);
+    if (!activeSessionId) {
+      const sessionToken = cookieStore.get('aviora_session_token')?.value;
+      if (!sessionToken) {
+        return NextResponse.json(
+          { error: { code: 'SESSION_TERMINATED', message: 'Session token missing.' } },
+          { status: 401 }
+        );
+      }
 
-    // Check if this user's active_sessions entry is still valid
-    const { data: activeSession } = await supabaseAdmin
-      .from('active_sessions')
-      .select('id, status, expires_at')
-      .eq('user_id', user.id)
-      .eq('token_hash', tokenHash)
-      .eq('status', 'active')
-      .maybeSingle();
+      const tokenHash = await hashToken(sessionToken);
 
-    if (!activeSession) {
-      return NextResponse.json(
-        { error: { code: 'SESSION_TERMINATED', message: 'Your session was terminated. You have been logged in on another device.' } },
-        { status: 401 }
-      );
-    }
+      // Fallback: Check active_sessions entry
+      const { data: activeSession } = await supabaseAdmin
+        .from('active_sessions')
+        .select('id, status, expires_at')
+        .eq('user_id', user.id)
+        .eq('token_hash', tokenHash)
+        .eq('status', 'active')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
 
-    if (new Date(activeSession.expires_at) < new Date()) {
-      return NextResponse.json(
-        { error: { code: 'SESSION_EXPIRED', message: 'Your session has expired. Please log in again.' } },
-        { status: 401 }
-      );
+      if (!activeSession) {
+        return NextResponse.json(
+          { error: { code: 'SESSION_TERMINATED', message: 'Your session was terminated. You have been logged in on another device.' } },
+          { status: 401 }
+        );
+      }
+      activeSessionId = activeSession.id;
     }
 
     // Optimization 3: Fire-and-forget last_active_at update (non-critical)
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
     supabaseAdmin
       .from('active_sessions')
       .update({ last_active_at: nowIso })
-      .eq('id', activeSession.id)
+      .eq('id', activeSessionId)
       .then()
       .catch(console.error);
 

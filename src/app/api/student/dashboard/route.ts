@@ -22,6 +22,7 @@ function computeExamAvailability(exam: any, nowIso: string): boolean {
 }
 
 export async function GET() {
+  const tRouteStart = performance.now();
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -36,7 +37,9 @@ export async function GET() {
     );
 
     // Optimization 1: Use getSession() instead of getUser()
+    const tAuthStart = performance.now();
     const { data: { session }, error: authError } = await supabase.auth.getSession();
+    const tAuthEnd = performance.now();
     const user = session?.user ?? null;
     if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
@@ -53,8 +56,15 @@ export async function GET() {
       }
     );
 
-    // Optimization 2: Call consolidated RPC function or execute single query block
+    // Optimization 2: Call consolidated RPC function
+    const tRpcStart = performance.now();
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('student_get_dashboard');
+    const tRpcEnd = performance.now();
+    const rpcMs = tRpcEnd - tRpcStart;
+    const authMs = tAuthEnd - tAuthStart;
+    const totalMs = performance.now() - tRouteStart;
+
+    console.log(`[Dashboard API Telemetry] total=${totalMs.toFixed(1)}ms auth=${authMs.toFixed(1)}ms rpc=${rpcMs.toFixed(1)}ms fallback=${!!rpcError}`);
 
     if (rpcError || !rpcData) {
       // Fallback in case migration RPC is not applied in current DB environment yet
