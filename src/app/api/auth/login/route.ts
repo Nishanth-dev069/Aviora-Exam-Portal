@@ -20,6 +20,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
     const { email, password } = result.data;
+    // Also extract device info from body (not validated by schema — optional extra fields)
+    const device_id: string | undefined = typeof body.device_id === 'string' ? body.device_id : undefined;
+    const device_info: Record<string, unknown> = (typeof body.device_info === 'object' && body.device_info !== null) ? body.device_info : {};
 
     const cookieStore = await cookies();
 
@@ -98,6 +101,119 @@ export async function POST(request: Request) {
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
       );
     }
+
+    // ──────────────────────────────────────────────────
+    // DEVICE CHECK — students only
+    // Admin and super_admin bypass completely
+    // ──────────────────────────────────────────────────
+    if (userProfile.role === 'student') {
+      if (!device_id || device_id.length < 10) {
+        await supabaseAnon.auth.signOut();
+        return NextResponse.json({
+          error: {
+            code: 'DEVICE_NOT_REGISTERED',
+            message: 'Unable to identify your device. Please ensure cookies and localStorage are enabled in your browser.',
+          }
+        }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+      }
+
+      const { data: profile } = await supabaseAdmin
+        .from('student_profiles')
+        .select('registered_device_id, registered_device_info')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!profile) {
+        await supabaseAnon.auth.signOut();
+        return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Student profile not found.' } }, { status: 404 });
+      }
+
+      if (profile.registered_device_id === null || profile.registered_device_id === undefined) {
+        // First login — register this device
+        // Normalize ::1 (IPv6 loopback on localhost) → 127.0.0.1 for readable display
+        const rawIp = ipAddress.split(',')[0].trim();
+        const clientIp = rawIp === '::1' ? '127.0.0.1' : rawIp;
+        const deviceInfoToStore = {
+          ...device_info,
+          user_agent:    userAgent,
+          ip_address:    clientIp,
+          registered_at: new Date().toISOString(),
+          last_login_at: new Date().toISOString(),
+        };
+
+        const { error: registerError } = await supabaseAdmin
+          .from('student_profiles')
+          .update({
+            registered_device_id:   device_id,
+            registered_device_info: deviceInfoToStore,
+            updated_at:             new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+
+        if (registerError) {
+          console.error('[Login] Failed to register device:', registerError);
+        }
+
+        // Audit log (fire and forget)
+        void (async () => {
+          try {
+            await supabaseAdmin.from('audit_logs').insert({
+              actor_id:      userId,
+              actor_role:    userProfile.role,
+              action:        'student.device_registered',
+              resource_type: 'student_profile',
+              resource_id:   userId,
+              metadata:      { device_id, registered_at: deviceInfoToStore.registered_at },
+              ip_address:    clientIp,
+            });
+          } catch (e) { console.error('[Audit] device_registered', e); }
+        })();
+
+      } else if (profile.registered_device_id !== device_id) {
+        // Different device — BLOCK login immediately
+        await supabaseAnon.auth.signOut();
+
+        // Audit log blocked attempt (fire and forget)
+        void (async () => {
+          try {
+            await supabaseAdmin.from('audit_logs').insert({
+              actor_id:      userId,
+              actor_role:    userProfile.role,
+              action:        'student.login_blocked_wrong_device',
+              resource_type: 'user',
+              resource_id:   userId,
+              metadata:      { attempted_device_id: device_id, ip_address: ipAddress.split(',')[0] },
+              ip_address:    ipAddress.split(',')[0],
+            });
+          } catch (e) { console.error('[Audit] login_blocked_wrong_device', e); }
+        })();
+
+        return NextResponse.json({
+          error: {
+            code:    'DEVICE_NOT_REGISTERED',
+            message: 'This account is registered to a different device. Please contact your administrator to change your registered device.',
+          }
+        }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+
+      } else {
+        // Same device — update last_login_at (fire and forget)
+        void (async () => {
+          try {
+            const existingInfo = (typeof profile.registered_device_info === 'object' && profile.registered_device_info !== null)
+              ? profile.registered_device_info as Record<string, unknown>
+              : {};
+            await supabaseAdmin
+              .from('student_profiles')
+              .update({
+                registered_device_info: { ...existingInfo, last_login_at: new Date().toISOString() },
+                updated_at:             new Date().toISOString(),
+              })
+              .eq('user_id', userId);
+          } catch (e) { console.error('[Login] Failed to update last_login_at', e); }
+        })();
+      }
+    }
+    // For admin/super_admin: skip all device checks — fall through to normal session creation
 
     // STEP 4: Terminate ALL existing active sessions for this user FIRST (before creating new one)
     const { error: terminateError } = await supabaseAdmin

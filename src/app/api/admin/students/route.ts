@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
       photo_url,
       batch_id,
       created_at,
+      registered_device_id,
+      registered_device_info,
       users!inner (
         id,
         email,

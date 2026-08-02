@@ -4,9 +4,10 @@ import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Eye, EyeOff, Plane, AlertTriangle } from 'lucide-react';
+import { Eye, EyeOff, Plane, AlertTriangle, MonitorSmartphone } from 'lucide-react';
 import { z } from 'zod';
 import { loginSchema } from '@/lib/validators';
+import { getOrCreateDeviceId, getDeviceInfo } from '@/lib/device/device-id';
 
 const errorMessages: Record<string, string> = {
   session_terminated: 'Your session was ended because you signed in on another device.',
@@ -21,6 +22,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deviceBlocked, setDeviceBlocked] = useState(false);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,6 +32,7 @@ function LoginForm() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setDeviceBlocked(false);
     setIsLoading(true);
 
     try {
@@ -38,18 +41,28 @@ function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          device_id: getOrCreateDeviceId(),
+          device_info: getDeviceInfo(),
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error?.message || data.error || 'Invalid email or password');
+        if (data.error?.code === 'DEVICE_NOT_REGISTERED') {
+          setDeviceBlocked(true);
+          setError(data.error.message);
+        } else {
+          setError(data.error?.message || data.error || 'Invalid email or password');
+        }
         setIsLoading(false);
         return;
       }
 
-      // Success routing with intended redirect support (use window.location to purge stale RSC layout cache)
+      // Success routing with intended redirect support
       const redirectTarget = searchParams.get('redirect');
       if (redirectTarget && redirectTarget.startsWith('/')) {
         window.location.href = redirectTarget;
@@ -117,7 +130,17 @@ function LoginForm() {
             }
           />
 
-          {error && <p className="text-danger text-sm font-medium">{error}</p>}
+          {deviceBlocked && error ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+              <MonitorSmartphone className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Device Not Registered</p>
+                <p className="text-sm text-amber-700 mt-1">{error}</p>
+              </div>
+            </div>
+          ) : error ? (
+            <p className="text-danger text-sm font-medium">{error}</p>
+          ) : null}
 
           <div className="pt-2">
             <Button

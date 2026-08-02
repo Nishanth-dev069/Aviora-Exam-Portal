@@ -9,7 +9,19 @@ import EditStudentModal from './EditStudentModal';
 import ResetPasswordModal from './ResetPasswordModal';
 import { StudentActionsMenu } from './students/StudentActionsMenu';
 
-export type StudentType = { user_id: string, full_name: string, roll_number: string, batch_id?: string, phone?: string, photo_url?: string | null, batches?: { name: string }, users?: { status: string, last_login?: string, last_active_at?: string }, last_active_at?: string };
+export type StudentType = { 
+  user_id: string;
+  full_name: string;
+  roll_number: string;
+  batch_id?: string;
+  phone?: string;
+  photo_url?: string | null;
+  batches?: { name: string };
+  users?: { status: string; last_login?: string; last_active_at?: string };
+  last_active_at?: string;
+  registered_device_id?: string | null;
+  registered_device_info?: Record<string, unknown> | null;
+};
 
 function ActiveDot({ lastActiveAt }: { lastActiveAt: string | null }) {
   if (!lastActiveAt) return <span className="inline-block h-2 w-2 rounded-full bg-gray-300 shrink-0" />;
@@ -234,6 +246,7 @@ export default function StudentList() {
                 <th className="px-6 py-4 font-semibold">Roll No</th>
                 <th className="px-6 py-4 font-semibold">Batch</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
+                <th className="px-6 py-4 font-semibold">Device</th>
                 <th className="px-6 py-4 font-semibold">Last Active</th>
                 <th className="px-6 py-4 font-semibold w-16"></th>
               </tr>
@@ -251,6 +264,7 @@ export default function StudentList() {
                     <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-16 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-6 w-6 rounded" /></td>
                   </tr>
@@ -291,6 +305,19 @@ export default function StudentList() {
                         {isActive ? 'Active' : 'Suspended'}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-sm">
+                      {student.registered_device_id ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-success font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                          Registered
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-text-muted">
+                          <span className="w-1.5 h-1.5 rounded-full bg-text-muted/40" />
+                          None
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-text-secondary whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <ActiveDot lastActiveAt={lastActiveTime} />
@@ -316,7 +343,7 @@ export default function StudentList() {
             )}
               {students.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-text-muted">
+                  <td colSpan={8} className="px-6 py-12 text-center text-text-muted">
                     No students found matching your criteria.
                   </td>
                 </tr>

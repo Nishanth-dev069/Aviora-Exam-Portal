@@ -16,10 +16,20 @@ const editSchema = z.object({
 type FormData = z.infer<typeof editSchema>;
 
 import { StudentPhotoUpload } from './StudentPhotoUpload';
+import { DeviceRegistrationSection } from './DeviceRegistrationSection';
 
 interface Props {
   isOpen: boolean;
-  student: { user_id: string, full_name: string, roll_number?: string, batch_id?: string, phone?: string, photo_url?: string | null } | null;
+  student: { 
+    user_id: string; 
+    full_name: string; 
+    roll_number?: string; 
+    batch_id?: string; 
+    phone?: string; 
+    photo_url?: string | null;
+    registered_device_id?: string | null;
+    registered_device_info?: Record<string, unknown> | null;
+  } | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -27,6 +37,8 @@ interface Props {
 export default function EditStudentModal({ isOpen, student, onClose, onSuccess }: Props) {
   const [batches, setBatches] = useState<{id: string, name: string}[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<Record<string, unknown> | null>(null);
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<FormData>({
     resolver: zodResolver(editSchema)
@@ -40,6 +52,9 @@ export default function EditStudentModal({ isOpen, student, onClose, onSuccess }
         phone: student.phone || '',
       });
       setServerError(null);
+      // Load device info from student prop (passed from list)
+      setDeviceId(student.registered_device_id ?? null);
+      setDeviceInfo((student.registered_device_info as Record<string, unknown>) ?? null);
       
       fetch('/api/admin/batches?pageSize=100')
         .then(res => res.json())
@@ -98,6 +113,17 @@ export default function EditStudentModal({ isOpen, student, onClose, onSuccess }
             studentId={student.user_id}
             currentPhotoUrl={student.photo_url}
             onPhotoUploaded={() => onSuccess()}
+          />
+
+          <DeviceRegistrationSection
+            studentId={student.user_id}
+            registeredDeviceId={deviceId}
+            registeredDeviceInfo={deviceInfo as any}
+            onDeviceCleared={() => {
+              setDeviceId(null);
+              setDeviceInfo(null);
+              onSuccess();
+            }}
           />
           
           {serverError && (
