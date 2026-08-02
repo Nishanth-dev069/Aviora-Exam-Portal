@@ -49,14 +49,14 @@ function LoginForm() {
         return;
       }
 
-      // Success routing with intended redirect support
+      // Success routing with intended redirect support (use window.location to purge stale RSC layout cache)
       const redirectTarget = searchParams.get('redirect');
       if (redirectTarget && redirectTarget.startsWith('/')) {
-        router.push(redirectTarget);
+        window.location.href = redirectTarget;
       } else if (data.user.role === 'admin' || data.user.role === 'super_admin') {
-        router.push('/admin/students');
+        window.location.href = '/admin/students';
       } else {
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       if (err instanceof z.ZodError) {

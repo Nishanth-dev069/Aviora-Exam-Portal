@@ -20,10 +20,10 @@ export function StudentNav({ studentName }: StudentNavProps) {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       await clearAuthState();
-      router.push('/login');
+      window.location.href = '/login';
     } catch {
       await clearAuthState();
-      router.push('/login');
+      window.location.href = '/login';
     }
   };
 

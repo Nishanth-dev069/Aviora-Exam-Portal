@@ -36,8 +36,7 @@ export default function AdminSidebar({ adminName }: Props) {
       console.error('Logout API call error', err);
     }
     await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
+    window.location.href = '/login';
   };
 
   return (
