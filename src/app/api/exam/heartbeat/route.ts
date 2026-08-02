@@ -82,8 +82,6 @@ export async function POST(request: NextRequest) {
       .eq('id', activeSessionId)
       .then();
 
-    const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
-
     if (ENABLE_PROFILING) {
       const requestId = request.headers.get('x-request-id') || 'unknown';
       const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');

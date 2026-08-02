@@ -205,8 +205,6 @@ export async function GET(request: Request) {
     const serMs = tSerEnd - tSerStart;
     const routeTotalMs = performance.now() - tRouteStart;
 
-    const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
-
     if (ENABLE_PROFILING) {
       console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_get_dashboard RPC\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profile.full_name}\nTimestamp: ${new Date().toISOString()}`);
     }
