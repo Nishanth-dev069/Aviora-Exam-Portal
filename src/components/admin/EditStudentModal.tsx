@@ -15,9 +15,11 @@ const editSchema = z.object({
 
 type FormData = z.infer<typeof editSchema>;
 
+import { StudentPhotoUpload } from './StudentPhotoUpload';
+
 interface Props {
   isOpen: boolean;
-  student: { user_id: string, full_name: string, roll_number?: string, batch_id?: string, phone?: string } | null;
+  student: { user_id: string, full_name: string, roll_number?: string, batch_id?: string, phone?: string, photo_url?: string | null } | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -90,7 +92,13 @@ export default function EditStudentModal({ isOpen, student, onClose, onSuccess }
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+          
+          <StudentPhotoUpload
+            studentId={student.user_id}
+            currentPhotoUrl={student.photo_url}
+            onPhotoUploaded={() => onSuccess()}
+          />
           
           {serverError && (
             <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm font-medium">

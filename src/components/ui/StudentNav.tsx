@@ -8,23 +8,23 @@ import { Button } from '@/components/ui/Button';
 
 interface StudentNavProps {
   studentName: string;
+  photoUrl?: string | null;
 }
 
 import { clearAuthState } from '@/lib/auth/cleanup';
 
-export function StudentNav({ studentName }: StudentNavProps) {
+export function StudentNav({ studentName, photoUrl }: StudentNavProps) {
   const pathname = usePathname();
   const router = useRouter();
 
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      await clearAuthState();
-      window.location.href = '/login';
     } catch {
-      await clearAuthState();
-      window.location.href = '/login';
+      // Ignore network errors on logout
     }
+    await clearAuthState();
+    window.location.href = '/login';
   };
 
   const navLinks = [
@@ -35,6 +35,8 @@ export function StudentNav({ studentName }: StudentNavProps) {
     { name: 'Profile', href: '/profile' },
   ];
 
+  const initial = (studentName || 'S').charAt(0).toUpperCase();
+
   return (
     <header className="bg-surface border-b border-border shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -42,10 +44,12 @@ export function StudentNav({ studentName }: StudentNavProps) {
           
           {/* Logo & Links */}
           <div className="flex">
-            <div className="flex flex-shrink-0 items-center text-primary font-bold gap-2 mr-8">
-              <Plane className="h-5 w-5" />
-              <span>AVIORA Portal</span>
-            </div>
+            <Link href="/dashboard" className="flex flex-shrink-0 items-center gap-2.5 mr-8 hover:opacity-90 transition-opacity">
+              <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-8 w-auto object-contain" />
+              <span className="text-lg font-black tracking-tight text-text-primary">
+                AVIORA <span className="text-text-muted font-normal text-xs ml-0.5">Portal</span>
+              </span>
+            </Link>
             
             <nav className="hidden md:flex space-x-8">
               {navLinks.map((link) => {
@@ -69,9 +73,20 @@ export function StudentNav({ studentName }: StudentNavProps) {
 
           {/* User Info & Logout */}
           <div className="flex items-center gap-4">
-            <span className="hidden sm:block text-sm font-medium text-text-primary">
-              {studentName}
-            </span>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-surface-2 border border-border shrink-0 flex items-center justify-center shadow-xs">
+                {photoUrl ? (
+                  <img src={photoUrl} alt={studentName} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold text-xs">
+                    {initial}
+                  </div>
+                )}
+              </div>
+              <span className="hidden sm:block text-sm font-bold text-text-primary">
+                {studentName}
+              </span>
+            </div>
             <Button 
               variant="ghost" 
               size="sm" 

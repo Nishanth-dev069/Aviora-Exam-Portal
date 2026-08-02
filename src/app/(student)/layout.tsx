@@ -6,6 +6,8 @@ import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { createServerClient } from '@supabase/ssr';
 import { cookies, headers } from 'next/headers';
 
+import { getSignedUrl } from '@/lib/storage/signed-urls';
+
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const reqHeaders = await headers();
@@ -26,14 +28,21 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const { data: { user } } = await supabase.auth.getUser();
   
   let fullName = user?.user_metadata?.full_name || user?.email || 'PROFILE_RESOLUTION_FAILED';
+  let photoUrl: string | null = null;
 
-  if (user && !user.user_metadata?.full_name) {
-     const { data } = await supabase.from('student_profiles').select('full_name').eq('user_id', user.id).maybeSingle();
-     if (data?.full_name) {
-       fullName = data.full_name;
-     } else {
-       console.error(`[CRITICAL_IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: layout\nOrigin: server_component_layout\nPath: /dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nError: PROFILE_RESOLUTION_FAILED\nTimestamp: ${new Date().toISOString()}`);
-     }
+  if (user) {
+    const { data: profile } = await supabase
+      .from('student_profiles')
+      .select('full_name, photo_url')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (profile?.full_name) {
+      fullName = profile.full_name;
+    }
+    if (profile?.photo_url) {
+      photoUrl = await getSignedUrl(profile.photo_url, 3600);
+    }
   }
 
   if (process.env.ENABLE_PROFILING === 'true') {
@@ -45,11 +54,25 @@ export default async function StudentLayout({ children }: { children: React.Reac
       <OfflineBanner />
       <HeartbeatProvider />
       <DeviceDetector />
-      <div className="min-h-screen bg-background">
-        <StudentNav studentName={fullName} />
-        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-background flex flex-col">
+        <StudentNav studentName={fullName} photoUrl={photoUrl} />
+        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex-1 w-full">
           {children}
         </main>
+        <footer className="border-t border-border py-4 bg-surface text-center mt-auto">
+          <div className="flex items-center justify-center gap-1.5 text-xs text-text-muted">
+            <span>Developed & maintained by</span>
+            <a
+              href="https://zyxen.in"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-bold text-primary hover:underline ml-0.5"
+            >
+              <img src="/zyxen-logo.jpeg" alt="ZYXEN Logo" className="h-4 w-auto rounded-xs object-contain" />
+              <span>ZYXEN</span>
+            </a>
+          </div>
+        </footer>
       </div>
     </>
   );

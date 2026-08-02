@@ -16,12 +16,21 @@ export interface IDBExamSession {
   exam_subject: string;
   duration_minutes: number;
   question_ids: string[];      // ordered array of question IDs for this student
+  student_identity?: {
+    full_name: string;
+    roll_number: string;
+    batch_name: string;
+    email: string;
+    photo_url: string | null;
+  };
 }
 
 export interface IDBQuestion {
   question_id: string;         // primary key
   session_id: string;
   content: string;
+  content_image_url?: string | null;
+  explanation_image_url?: string | null;
   options: Array<{ id: string; content: string }>;  // in randomized order
 }
 

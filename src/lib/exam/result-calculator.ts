@@ -9,6 +9,8 @@ export interface ComputeResultInput {
     question_id: string;
     marks: number;
     content: string;
+    content_image_url?: string | null;
+    explanation_image_url?: string | null;
     explanation: string;
     options: {
       id: string;
@@ -93,6 +95,8 @@ export function computeResult(input: ComputeResultInput): ComputedResult {
     return {
       question_id: eq.question_id,
       question_content: eq.content,
+      content_image_url: eq.content_image_url ?? null,
+      explanation_image_url: eq.explanation_image_url ?? null,
       selected_option_id: selectedOptionId,
       selected_option_content: selectedOption?.content ?? null,
       correct_option_id: correctOption?.id ?? '',

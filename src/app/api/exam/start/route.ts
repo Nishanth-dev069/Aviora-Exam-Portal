@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getSignedUrl } from '@/lib/storage/signed-urls';
 
 const schema = z.object({ exam_id: z.string().uuid() });
 
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
         .select(`
           question_id,
           questions (
-            id, content,
+            id, content, content_image_url, explanation_image_url,
             question_options (id, content)
           )
         `)
@@ -199,7 +201,23 @@ export async function POST(request: Request) {
         activeSession.expires_at = computedExpiresIso;
       }
       
-      const questionsData = examQuestionsRes.data;
+      const questionSignedUrlExpiry = (exam.duration_minutes + 120) * 60;
+
+      let questionsData = examQuestionsRes.data;
+      if (examQuestionsRes.error && (examQuestionsRes.error as any).code === '42703') {
+        const fallbackRes = await supabaseAdmin
+          .from('exam_questions')
+          .select(`
+            question_id,
+            questions (
+              id, content,
+              question_options (id, content)
+            )
+          `)
+          .eq('exam_id', exam_id);
+        questionsData = fallbackRes.data as any;
+      }
+
       const questionsMap = new Map();
       (questionsData || []).forEach((row: any) => {
         const qObj = Array.isArray(row.questions) ? row.questions[0] : row.questions;
@@ -208,21 +226,48 @@ export async function POST(request: Request) {
         }
       });
 
-      const recoveredQuestions = ((activeSession.question_order as string[]) || []).map((qid: string) => {
-        const q = questionsMap.get(qid);
-        const optionOrderForQ = ((activeSession.option_orders as Record<string, string[]>)[qid]) || [];
-        const optsMap = new Map();
-        (q?.question_options || []).forEach((opt: any) => optsMap.set(opt.id, opt));
-        
-        return {
-          id: q?.id || qid,
-          content: q?.content || '',
-          options: optionOrderForQ.map((optId: string) => {
-             const o = optsMap.get(optId);
-             return { id: o?.id || optId, content: o?.content || '' };
-          })
-        };
-      });
+      const recoveredQuestions = await Promise.all(
+        ((activeSession.question_order as string[]) || []).map(async (qid: string) => {
+          const q = questionsMap.get(qid);
+          const optionOrderForQ = ((activeSession.option_orders as Record<string, string[]>)[qid]) || [];
+          const optsMap = new Map();
+          (q?.question_options || []).forEach((opt: any) => optsMap.set(opt.id, opt));
+          
+          return {
+            id: q?.id || qid,
+            content: q?.content || '',
+            content_image_url: q?.content_image_url
+              ? await getSignedUrl(q.content_image_url, questionSignedUrlExpiry)
+              : null,
+            explanation_image_url: q?.explanation_image_url
+              ? await getSignedUrl(q.explanation_image_url, questionSignedUrlExpiry)
+              : null,
+            options: optionOrderForQ.map((optId: string) => {
+               const o = optsMap.get(optId);
+               return { id: o?.id || optId, content: o?.content || '' };
+            })
+          };
+        })
+      );
+
+      // Fetch student profile for exam header display
+      const { data: studentProfile } = await supabaseAdmin
+        .from('student_profiles')
+        .select('full_name, roll_number, photo_url, batch_id, batches(name)')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const photoSignedUrl = studentProfile?.photo_url
+        ? await getSignedUrl(studentProfile.photo_url, questionSignedUrlExpiry)
+        : null;
+
+      const studentIdentity = {
+        full_name: studentProfile?.full_name ?? user.user_metadata?.full_name ?? '',
+        roll_number: studentProfile?.roll_number ?? '',
+        batch_name: (studentProfile?.batches as any)?.name ?? '',
+        email: user.email || '',
+        photo_url: photoSignedUrl,
+      };
 
       return NextResponse.json({
         session: {
@@ -239,6 +284,7 @@ export async function POST(request: Request) {
           settings: exam.settings
         },
         questions: recoveredQuestions,
+        student_identity: studentIdentity,
         server_time: new Date().toISOString()
       });
     } else if (submittedSessions.length > 0) {
@@ -256,7 +302,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Student account is not active' } }, { status: 403 });
     }
 
-    const examQuestions = examQuestionsRes.data;
+    let examQuestions = examQuestionsRes.data;
+    if (examQuestionsRes.error && (examQuestionsRes.error as any).code === '42703') {
+      const fallbackRes = await supabaseAdmin
+        .from('exam_questions')
+        .select(`
+          question_id,
+          questions (
+            id, content,
+            question_options (id, content)
+          )
+        `)
+        .eq('exam_id', exam_id);
+      examQuestions = fallbackRes.data as any;
+    }
+
     if (!examQuestions || examQuestions.length === 0) {
       return NextResponse.json({ error: { code: 'NO_QUESTIONS', message: 'This exam has no questions configured.' } }, { status: 400 });
     }
@@ -289,6 +349,8 @@ export async function POST(request: Request) {
       finalQuestions.push({
         id: q.id,
         content: q.content,
+        raw_content_image_url: q.content_image_url,
+        raw_explanation_image_url: q.explanation_image_url,
         options: shuffledOptions.map(optId => {
           const opt = optsMap.get(optId);
           return { id: opt.id, content: opt.content };
@@ -335,6 +397,40 @@ export async function POST(request: Request) {
       newSession.expires_at = computedExpiresIso;
     }
 
+    // Fetch student profile for exam header display
+    const { data: newStudentProfile } = await supabaseAdmin
+      .from('student_profiles')
+      .select('full_name, roll_number, photo_url, batch_id, batches(name)')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const questionSignedUrlExpiry = (exam.duration_minutes + 120) * 60;
+    const newPhotoSignedUrl = newStudentProfile?.photo_url
+      ? await getSignedUrl(newStudentProfile.photo_url, questionSignedUrlExpiry)
+      : null;
+
+    const newStudentIdentity = {
+      full_name: newStudentProfile?.full_name ?? user.user_metadata?.full_name ?? '',
+      roll_number: newStudentProfile?.roll_number ?? '',
+      batch_name: (newStudentProfile?.batches as any)?.name ?? '',
+      email: user.email || '',
+      photo_url: newPhotoSignedUrl,
+    };
+
+    const finalQuestionsWithSignedUrls = await Promise.all(
+      finalQuestions.map(async (q) => ({
+        id: q.id,
+        content: q.content,
+        content_image_url: q.raw_content_image_url
+          ? await getSignedUrl(q.raw_content_image_url, questionSignedUrlExpiry)
+          : null,
+        explanation_image_url: q.raw_explanation_image_url
+          ? await getSignedUrl(q.raw_explanation_image_url, questionSignedUrlExpiry)
+          : null,
+        options: q.options,
+      }))
+    );
+
     // 8. RETURN
     return NextResponse.json({
       session: {
@@ -350,7 +446,8 @@ export async function POST(request: Request) {
         duration_minutes: exam.duration_minutes,
         settings: exam.settings
       },
-      questions: finalQuestions,
+      questions: finalQuestionsWithSignedUrls,
+      student_identity: newStudentIdentity,
       server_time: new Date().toISOString()
     });
 

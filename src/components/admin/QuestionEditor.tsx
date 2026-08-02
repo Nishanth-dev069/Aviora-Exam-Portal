@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 
+import { QuestionImageUpload } from './QuestionImageUpload';
+
 const optionSchema = z.object({
   id: z.string().optional().nullable(),
   text: z.string().min(1, 'Option text cannot be empty'),
@@ -35,7 +37,7 @@ type QuestionFormData = z.infer<typeof questionSchema>;
 
 interface Props {
   isOpen: boolean;
-  question: { id: string, subject: string, topic?: string | null, difficulty: string, text?: string, content?: string, explanation: string, question_options: { id: string, text?: string, content?: string, is_correct: boolean }[] } | null;
+  question: { id: string, subject: string, topic?: string | null, difficulty: string, text?: string, content?: string, explanation: string, content_image_url?: string | null, explanation_image_url?: string | null, question_options: { id: string, text?: string, content?: string, is_correct: boolean }[] } | null;
   bankId: string;
   bankSubject: string;
   onClose: () => void;
@@ -44,6 +46,11 @@ interface Props {
 
 export default function QuestionEditor({ isOpen, question, bankId, bankSubject, onClose, onSuccess }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
+  const [contentImageFile, setContentImageFile] = useState<File | null>(null);
+  const [contentImageRemoved, setContentImageRemoved] = useState<boolean>(false);
+  const [explanationImageFile, setExplanationImageFile] = useState<File | null>(null);
+  const [explanationImageRemoved, setExplanationImageRemoved] = useState<boolean>(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
 
   const { register, control, handleSubmit, formState: { errors, isSubmitting }, reset, setValue, watch, setError } = useForm<QuestionFormData>({
     resolver: zodResolver(questionSchema),
@@ -69,6 +76,11 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
 
   useEffect(() => {
     if (isOpen) {
+      setContentImageFile(null);
+      setContentImageRemoved(false);
+      setExplanationImageFile(null);
+      setExplanationImageRemoved(false);
+      setIsUploadingImages(false);
       if (question) {
         reset({
           id: question.id,
@@ -120,6 +132,33 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
     setValue('options', currentOptions);
   };
 
+  const uploadNewImage = async (qId: string, file: File, type: 'content' | 'explanation') => {
+    const form = new FormData();
+    form.append('image', file);
+    form.append('image_type', type);
+    const res = await fetch(`/api/admin/questions/${qId}/images`, {
+      method: 'POST',
+      body: form,
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      let msg = `Failed to upload ${type} image`;
+      try {
+        const err = text ? JSON.parse(text) : {};
+        msg = err.error?.message || msg;
+      } catch {}
+      throw new Error(msg);
+    }
+  };
+
+  const deleteQuestionImage = async (qId: string, type: 'content' | 'explanation') => {
+    await fetch(`/api/admin/questions/${qId}/images`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_type: type }),
+    });
+  };
+
   const onSubmit = async (data: QuestionFormData) => {
     setServerError(null);
     try {
@@ -137,7 +176,13 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const result = await res.json();
+      const text = await res.text();
+      let result: any = {};
+      try {
+        result = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`Server returned status ${res.status}. Please try again.`);
+      }
 
       if (!res.ok) {
         if (result.error?.code === 'VALIDATION_ERROR' && Array.isArray(result.error.details)) {
@@ -148,14 +193,37 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
           });
           setServerError(result.error.message || 'Please fix the highlighted fields.');
         } else {
-          setServerError(result.error?.message || result.error || 'Failed to save question');
+          const errMsg = typeof result.error === 'string' 
+            ? result.error 
+            : result.error?.message || result.message || `Failed to save question (HTTP ${res.status})`;
+          setServerError(errMsg);
         }
         return;
       }
+
+      const savedQuestionId = data.id || result.id || result.data?.id || (Array.isArray(result.data) ? result.data[0]?.id : null);
+
+      if (savedQuestionId) {
+        setIsUploadingImages(true);
+        if (contentImageFile) {
+          await uploadNewImage(savedQuestionId, contentImageFile, 'content');
+        } else if (contentImageRemoved) {
+          await deleteQuestionImage(savedQuestionId, 'content');
+        }
+
+        if (explanationImageFile) {
+          await uploadNewImage(savedQuestionId, explanationImageFile, 'explanation');
+        } else if (explanationImageRemoved) {
+          await deleteQuestionImage(savedQuestionId, 'explanation');
+        }
+      }
+
       onSuccess();
       onClose();
-    } catch {
-      setServerError('An unexpected error occurred while saving the question.');
+    } catch (err: any) {
+      setServerError(err.message || 'An unexpected error occurred while saving the question.');
+    } finally {
+      setIsUploadingImages(false);
     }
   };
 
@@ -219,17 +287,29 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
               {errors.difficulty && <p className="text-xs text-red-600 mt-1 font-medium">{errors.difficulty.message}</p>}
             </div>
 
-            <div className="pt-2 border-t border-border">
-              <label className="block text-sm font-medium text-text-secondary mb-2">
-                Question Text <span className="text-red-500">*</span>
-              </label>
-              <textarea 
-                {...register('text')}
-                rows={4}
-                className={cn("w-full px-4 py-3 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.text ? "border-red-500 focus:ring-red-500" : "border-border")}
-                placeholder="Type the question content here (minimum 10 characters)..."
+            <div className="pt-2 border-t border-border space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Question Text <span className="text-red-500">*</span>
+                </label>
+                <textarea 
+                  {...register('text')}
+                  rows={4}
+                  className={cn("w-full px-4 py-3 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.text ? "border-red-500 focus:ring-red-500" : "border-border")}
+                  placeholder="Type the question content here (minimum 10 characters)..."
+                />
+                {errors.text && <p className="text-xs text-red-600 mt-1 font-medium">{errors.text.message}</p>}
+              </div>
+
+              <QuestionImageUpload
+                label="Question Content Image / Diagram"
+                imageType="content"
+                currentImageUrl={question?.content_image_url}
+                onImageChange={(file, isRemoved) => {
+                  setContentImageFile(file);
+                  if (isRemoved) setContentImageRemoved(true);
+                }}
               />
-              {errors.text && <p className="text-xs text-red-600 mt-1 font-medium">{errors.text.message}</p>}
             </div>
 
             <div className="pt-2 border-t border-border">
@@ -291,17 +371,29 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
               )}
             </div>
 
-            <div className="pt-2 border-t border-border">
-              <label className="block text-sm font-medium text-text-secondary mb-2">
-                Explanation <span className="text-red-500">*</span> <span className="text-xs font-normal text-text-muted">(Min 20 characters — shown after submission)</span>
-              </label>
-              <textarea 
-                {...register('explanation')}
-                rows={4}
-                className={cn("w-full px-4 py-3 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.explanation ? "border-red-500 focus:ring-red-500" : "border-border")}
-                placeholder="Explain why the correct answer is right and why others are wrong..."
+            <div className="pt-2 border-t border-border space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Explanation <span className="text-red-500">*</span> <span className="text-xs font-normal text-text-muted">(Min 20 characters — shown after submission)</span>
+                </label>
+                <textarea 
+                  {...register('explanation')}
+                  rows={4}
+                  className={cn("w-full px-4 py-3 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.explanation ? "border-red-500 focus:ring-red-500" : "border-border")}
+                  placeholder="Explain why the correct answer is right and why others are wrong..."
+                />
+                {errors.explanation && <p className="text-xs text-red-600 mt-1 font-medium">{errors.explanation.message}</p>}
+              </div>
+
+              <QuestionImageUpload
+                label="Explanation Image / Diagram"
+                imageType="explanation"
+                currentImageUrl={question?.explanation_image_url}
+                onImageChange={(file, isRemoved) => {
+                  setExplanationImageFile(file);
+                  if (isRemoved) setExplanationImageRemoved(true);
+                }}
               />
-              {errors.explanation && <p className="text-xs text-red-600 mt-1 font-medium">{errors.explanation.message}</p>}
             </div>
 
           </form>
@@ -318,11 +410,11 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
           <button 
             type="submit"
             form="question-form"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isUploadingImages}
             className="px-8 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2 shadow-sm"
           >
-            {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            Save Question
+            {(isSubmitting || isUploadingImages) && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isUploadingImages ? 'Uploading Images...' : 'Save Question'}
           </button>
         </div>
 

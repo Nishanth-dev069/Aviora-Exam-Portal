@@ -72,11 +72,11 @@ function LoginForm() {
     <div className="w-full flex flex-col items-center">
       <div className="max-w-md w-full bg-surface shadow-lg rounded-xl p-8 mb-6">
         <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-2 text-primary font-bold text-2xl tracking-tight mb-1">
-            <Plane className="h-6 w-6" />
-            <span>AVIORA</span>
+          <div className="flex items-center gap-3 tracking-tight mb-1">
+            <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-10 w-auto object-contain" />
+            <span className="text-2xl font-black text-text-primary">AVIORA</span>
           </div>
-          <p className="text-text-secondary text-sm">Examination Portal</p>
+          <p className="text-text-secondary text-sm font-medium">Examination Portal</p>
         </div>
 
         {urlErrorMessage && (
@@ -135,8 +135,21 @@ function LoginForm() {
           Having trouble? <a href="#" className="hover:text-text-primary transition-colors">Contact your administrator</a>
         </div>
       </div>
-      <div className="text-sm text-surface-2/60">
-        &copy; AVIORA 2024 &middot; Aviation Training Portal
+
+      <div className="text-xs text-text-muted flex flex-col items-center gap-1.5">
+        <div>&copy; AVIORA &middot; Aviation Training Portal</div>
+        <div className="flex items-center gap-1.5">
+          <span>Developed & maintained by</span>
+          <a
+            href="https://zyxen.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-bold text-primary hover:underline"
+          >
+            <img src="/zyxen-logo.jpeg" alt="ZYXEN Logo" className="h-3.5 w-auto rounded-xs object-contain" />
+            <span>ZYXEN</span>
+          </a>
+        </div>
       </div>
     </div>
   );

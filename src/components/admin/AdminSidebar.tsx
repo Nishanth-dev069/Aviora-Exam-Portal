@@ -44,11 +44,11 @@ export default function AdminSidebar({ adminName }: Props) {
       
       {/* Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-        <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-          <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-black flex-shrink-0">
-            A
-          </div>
-          <span className="font-bold text-text-primary hidden md:inline">AVIORA Admin</span>
+        <div className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap">
+          <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-8 w-auto object-contain shrink-0" />
+          <span className="font-black text-text-primary text-base hidden md:inline">
+            AVIORA <span className="text-text-muted font-normal text-xs ml-0.5">Admin</span>
+          </span>
         </div>
       </div>
 
@@ -84,8 +84,8 @@ export default function AdminSidebar({ adminName }: Props) {
         })}
       </nav>
 
-      {/* Footer / Logout */}
-      <div className="p-4 border-t border-border">
+      {/* Footer / Logout & Zyxen Branding */}
+      <div className="p-4 border-t border-border space-y-3">
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-text-secondary hover:bg-surface-2 hover:text-danger transition-colors group"
@@ -93,6 +93,19 @@ export default function AdminSidebar({ adminName }: Props) {
           <LogOut className="w-5 h-5 flex-shrink-0 text-text-muted group-hover:text-danger" />
           <span className="text-sm font-medium hidden md:block">Logout</span>
         </button>
+
+        <div className="pt-2 border-t border-border/60 hidden md:block text-[11px] text-text-muted text-center leading-relaxed">
+          <span>Developed & maintained by</span>
+          <a
+            href="https://zyxen.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1 font-bold text-primary hover:underline ml-1"
+          >
+            <img src="/zyxen-logo.jpeg" alt="ZYXEN Logo" className="h-3.5 w-auto rounded-xs object-contain" />
+            <span>ZYXEN</span>
+          </a>
+        </div>
       </div>
 
     </aside>

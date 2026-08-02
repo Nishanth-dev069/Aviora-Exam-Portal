@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
+import { getSignedUrl } from '@/lib/storage/signed-urls';
 
 async function verifyAdmin() {
   const cookieStore = await cookies();
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
 
   let query = supabaseAdmin
     .from('questions')
-    .select('id, bank_id, content, text:content, subject, topic, difficulty, tags, explanation, created_at, question_options(id, content, text:content, is_correct, display_order)', { count: 'exact' })
+    .select('id, bank_id, content, text:content, subject, topic, difficulty, tags, explanation, content_image_url, explanation_image_url, created_at, question_options(id, content, text:content, is_correct, display_order)', { count: 'exact' })
     .eq('bank_id', bankId)
     .is('deleted_at', null);
 
@@ -78,24 +79,54 @@ export async function GET(request: Request) {
   const to = from + pageSize - 1;
   query = query.range(from, to);
 
-  const { data, error, count } = await query;
+  let { data, error, count } = await query;
   
+  if (error && (error as any).code === '42703') {
+    let fallbackQuery = supabaseAdmin
+      .from('questions')
+      .select('id, bank_id, content, text:content, subject, topic, difficulty, tags, explanation, created_at, question_options(id, content, text:content, is_correct, display_order)', { count: 'exact' })
+      .eq('bank_id', bankId)
+      .is('deleted_at', null);
+
+    if (search) fallbackQuery = fallbackQuery.ilike('content', `%${search}%`);
+    if (topicFilter && topicFilter !== 'all') fallbackQuery = fallbackQuery.eq('topic', topicFilter);
+    if (difficultyFilter && difficultyFilter !== 'all') fallbackQuery = fallbackQuery.ilike('difficulty', difficultyFilter);
+    fallbackQuery = fallbackQuery.order(sortBy, { ascending: sortOrder === 'asc' });
+    fallbackQuery = fallbackQuery.range(from, to);
+
+    const fallbackRes = await fallbackQuery;
+    data = fallbackRes.data;
+    error = fallbackRes.error;
+    count = fallbackRes.count;
+  }
+
   if (error) {
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: error.message } }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, data, count, page, pageSize });
+  // Resolve signed URLs for admin view (2 hours)
+  const dataWithSignedUrls = await Promise.all(
+    (data || []).map(async (q: any) => ({
+      ...q,
+      content_image_url: q?.content_image_url ? (await getSignedUrl(q.content_image_url, 7200).catch(() => null)) : null,
+      explanation_image_url: q?.explanation_image_url ? (await getSignedUrl(q.explanation_image_url, 7200).catch(() => null)) : null,
+      raw_content_image_url: q?.content_image_url || null,
+      raw_explanation_image_url: q?.explanation_image_url || null,
+    }))
+  );
+
+  return NextResponse.json({ success: true, data: dataWithSignedUrls, count, page, pageSize });
 }
 
 const optionSchema = z.object({
-  id: z.string().uuid().optional().nullable(),
+  id: z.string().optional().nullable(),
   content: z.string().min(1, 'Option text cannot be empty'),
   is_correct: z.boolean()
 });
 
 const createQuestionSchema = z.object({
-  id: z.string().uuid().optional().nullable(),
-  bank_id: z.string().uuid('Please select a question bank'),
+  id: z.string().optional().nullable(),
+  bank_id: z.string().min(1, 'Please select a question bank'),
   content: z.string().min(10, 'Question text must be at least 10 characters'),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   subject: z.string().min(1, 'Subject is required'),
@@ -112,142 +143,194 @@ const createQuestionSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await verifyAdmin();
-  if (auth.error) return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
+  try {
+    const auth = await verifyAdmin();
+    if (auth.error) return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
 
-  const supabaseAdmin = auth.supabaseAdmin!;
-  const adminUser = auth.user!;
-  const body = await request.json();
+    const supabaseAdmin = auth.supabaseAdmin!;
+    const adminUser = auth.user!;
+    const body = await request.json();
 
-  // Normalize text -> content for options & question body if legacy caller sends 'text'
-  const normalizedBody = {
-    ...body,
-    content: body.content || body.text,
-    options: Array.isArray(body.options)
-      ? body.options.map((opt: any) => ({
-          ...opt,
-          content: opt.content || opt.text,
-        }))
-      : body.options,
-  };
+    // Normalize text -> content for options & question body if legacy caller sends 'text'
+    const normalizedBody = {
+      ...body,
+      content: body.content || body.text,
+      options: Array.isArray(body.options)
+        ? body.options.map((opt: any) => ({
+            ...opt,
+            content: opt.content || opt.text,
+          }))
+        : body.options,
+    };
 
-  const parsed = createQuestionSchema.safeParse(normalizedBody);
-  
-  if (!parsed.success) {
-    return NextResponse.json({
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Please fix the highlighted fields.',
-        details: parsed.error.issues.map(e => ({
-          field: e.path.join('.'),
-          message: e.message
-        }))
+    const parsed = createQuestionSchema.safeParse(normalizedBody);
+    
+    if (!parsed.success) {
+      return NextResponse.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Please fix the highlighted fields.',
+          details: parsed.error.issues.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        }
+      }, { status: 400 });
+    }
+
+    const { id, bank_id, content, difficulty, subject, topic, tags, explanation, options } = parsed.data;
+
+    if (id) {
+      // UPDATE
+      const { data: existing } = await supabaseAdmin.from('questions').select('id').eq('id', id).maybeSingle();
+      if (!existing) {
+        return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Question not found' } }, { status: 404 });
       }
-    }, { status: 400 });
-  }
 
-  const { id, bank_id, content, difficulty, subject, topic, tags, explanation, options } = parsed.data;
+      const { error: updateErr } = await supabaseAdmin
+        .from('questions')
+        .update({
+          content,
+          difficulty,
+          subject,
+          topic: topic || null,
+          tags,
+          explanation,
+          updated_by: adminUser.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
 
-  if (id) {
-    // UPDATE
-    const { data: existing } = await supabaseAdmin.from('questions').select('id').eq('id', id).single();
-    if (!existing) {
-      return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Question not found' } }, { status: 404 });
+      if (updateErr) {
+        return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: updateErr.message } }, { status: 500 });
+      }
+
+      // Step 1: Reset is_correct = false on existing options to avoid partial unique index conflict
+      await supabaseAdmin.from('question_options').update({ is_correct: false }).eq('question_id', id);
+
+      // Step 2: Fetch existing option IDs in DB for this question
+      const { data: existingOpts } = await supabaseAdmin
+        .from('question_options')
+        .select('id')
+        .eq('question_id', id);
+
+      const existingIds = new Set((existingOpts || []).map(o => o.id));
+      const keepIds = new Set<string>();
+
+      for (let idx = 0; idx < options.length; idx++) {
+        const opt = options[idx];
+        if (opt.id && existingIds.has(opt.id)) {
+          keepIds.add(opt.id);
+          const { error: optUpdErr } = await supabaseAdmin
+            .from('question_options')
+            .update({
+              content: opt.content,
+              is_correct: opt.is_correct,
+              display_order: idx,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', opt.id);
+
+          if (optUpdErr) {
+            return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to update option: ' + optUpdErr.message } }, { status: 500 });
+          }
+        } else {
+          const { data: insertedOpt, error: optInsErr } = await supabaseAdmin
+            .from('question_options')
+            .insert({
+              question_id: id,
+              content: opt.content,
+              is_correct: opt.is_correct,
+              display_order: idx
+            })
+            .select('id')
+            .maybeSingle();
+
+          if (optInsErr) {
+            return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to insert option: ' + optInsErr.message } }, { status: 500 });
+          }
+          if (insertedOpt?.id) keepIds.add(insertedOpt.id);
+        }
+      }
+
+      // Step 3: Delete removed options (if any option was removed in editor)
+      const idsToDelete = [...existingIds].filter(optId => !keepIds.has(optId));
+      if (idsToDelete.length > 0) {
+        try {
+          await supabaseAdmin
+            .from('question_options')
+            .delete()
+            .in('id', idsToDelete);
+        } catch (_) { /* ignore FK-constraint issues on delete */ }
+      }
+
+      // Audit Log
+      try {
+        await supabaseAdmin.from('audit_logs').insert({
+          actor_id: adminUser.id,
+          actor_role: 'admin',
+          action: 'admin.question_edited',
+          resource_type: 'question',
+          resource_id: id,
+          ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+        });
+      } catch (auditErr) { console.error('[Audit Log Error]', auditErr); }
+
+      return NextResponse.json({ success: true, message: 'Question updated successfully', id });
+    } else {
+      // CREATE
+      const { data: newQ, error: createErr } = await supabaseAdmin
+        .from('questions')
+        .insert({
+          bank_id,
+          content,
+          type: 'mcq',
+          difficulty,
+          subject,
+          topic: topic || null,
+          tags,
+          explanation,
+          created_by: adminUser.id,
+          updated_by: adminUser.id
+        })
+        .select('id')
+        .single();
+
+      if (createErr || !newQ) {
+        return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: createErr?.message || 'Failed to create question' } }, { status: 500 });
+      }
+
+      const optionsToInsert = options.map((opt, idx) => ({
+        question_id: newQ.id,
+        content: opt.content,
+        is_correct: opt.is_correct,
+        display_order: idx
+      }));
+
+      const { error: optErr } = await supabaseAdmin.from('question_options').insert(optionsToInsert);
+
+      if (optErr) {
+        await supabaseAdmin.from('questions').delete().eq('id', newQ.id);
+        return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to save options: ' + optErr.message } }, { status: 500 });
+      }
+
+      // Audit Log
+      try {
+        await supabaseAdmin.from('audit_logs').insert({
+          actor_id: adminUser.id,
+          actor_role: 'admin',
+          action: 'admin.question_created',
+          resource_type: 'question',
+          resource_id: newQ.id,
+          ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+        });
+      } catch (auditErr) { console.error('[Audit Log Error]', auditErr); }
+
+      return NextResponse.json({ success: true, message: 'Question created successfully', id: newQ.id }, { status: 201 });
     }
-
-    const { error: updateErr } = await supabaseAdmin
-      .from('questions')
-      .update({
-        content,
-        difficulty,
-        subject,
-        topic: topic || null,
-        tags,
-        explanation,
-        updated_by: adminUser.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id);
-
-    if (updateErr) {
-      return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: updateErr.message } }, { status: 500 });
-    }
-
-    // Replace options
-    await supabaseAdmin.from('question_options').delete().eq('question_id', id);
-
-    const optionsToInsert = options.map((opt, idx) => ({
-      question_id: id,
-      content: opt.content,
-      is_correct: opt.is_correct,
-      display_order: idx
-    }));
-
-    const { error: optErr } = await supabaseAdmin.from('question_options').insert(optionsToInsert);
-
-    if (optErr) {
-      return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to update options: ' + optErr.message } }, { status: 500 });
-    }
-
-    // Audit Log
-    await supabaseAdmin.from('audit_logs').insert({
-      actor_id: adminUser.id,
-      actor_role: 'admin',
-      action: 'admin.question_edited',
-      resource_type: 'question',
-      resource_id: id,
-      ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
-    });
-
-    return NextResponse.json({ success: true, message: 'Question updated successfully', id });
-  } else {
-    // CREATE
-    const { data: newQ, error: createErr } = await supabaseAdmin
-      .from('questions')
-      .insert({
-        bank_id,
-        content,
-        type: 'mcq',
-        difficulty,
-        subject,
-        topic: topic || null,
-        tags,
-        explanation,
-        created_by: adminUser.id,
-        updated_by: adminUser.id
-      })
-      .select('id')
-      .single();
-
-    if (createErr || !newQ) {
-      return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: createErr?.message || 'Failed to create question' } }, { status: 500 });
-    }
-
-    const optionsToInsert = options.map((opt, idx) => ({
-      question_id: newQ.id,
-      content: opt.content,
-      is_correct: opt.is_correct,
-      display_order: idx
-    }));
-
-    const { error: optErr } = await supabaseAdmin.from('question_options').insert(optionsToInsert);
-
-    if (optErr) {
-      await supabaseAdmin.from('questions').delete().eq('id', newQ.id);
-      return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to save options: ' + optErr.message } }, { status: 500 });
-    }
-
-    // Audit Log
-    await supabaseAdmin.from('audit_logs').insert({
-      actor_id: adminUser.id,
-      actor_role: 'admin',
-      action: 'admin.question_created',
-      resource_type: 'question',
-      resource_id: newQ.id,
-      ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
-    });
-
-    return NextResponse.json({ success: true, message: 'Question created successfully', id: newQ.id }, { status: 201 });
+  } catch (err: any) {
+    console.error('[POST Questions Error]', err);
+    return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: err.message || 'An unexpected error occurred while saving.' } }, { status: 500 });
   }
 }
 

@@ -9,7 +9,7 @@ import EditStudentModal from './EditStudentModal';
 import ResetPasswordModal from './ResetPasswordModal';
 import { StudentActionsMenu } from './students/StudentActionsMenu';
 
-export type StudentType = { user_id: string, full_name: string, roll_number: string, batch_id?: string, phone?: string, batches?: { name: string }, users?: { status: string, last_login?: string, last_active_at?: string }, last_active_at?: string };
+export type StudentType = { user_id: string, full_name: string, roll_number: string, batch_id?: string, phone?: string, photo_url?: string | null, batches?: { name: string }, users?: { status: string, last_login?: string, last_active_at?: string }, last_active_at?: string };
 
 function ActiveDot({ lastActiveAt }: { lastActiveAt: string | null }) {
   if (!lastActiveAt) return <span className="inline-block h-2 w-2 rounded-full bg-gray-300 shrink-0" />;
@@ -229,6 +229,7 @@ export default function StudentList() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-2 border-b border-border text-xs uppercase tracking-wider text-text-secondary">
+                <th className="w-12 px-4 py-4 font-semibold">Photo</th>
                 <th className="px-6 py-4 font-semibold">Name</th>
                 <th className="px-6 py-4 font-semibold">Roll No</th>
                 <th className="px-6 py-4 font-semibold">Batch</th>
@@ -241,12 +242,11 @@ export default function StudentList() {
               {isLoading ? (
                 [...Array(6)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td className="px-6 py-4 flex items-center gap-3">
+                    <td className="px-4 py-4">
                       <Skeleton className="h-9 w-9 rounded-full shrink-0" />
-                      <div className="space-y-1.5 flex-1">
-                        <Skeleton className="h-4 w-32 rounded" />
-                        <Skeleton className="h-3 w-40 rounded" />
-                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Skeleton className="h-4 w-32 rounded" />
                     </td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
@@ -262,6 +262,17 @@ export default function StudentList() {
                 
                 return (
                   <tr key={student.user_id} className="hover:bg-surface-2/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="w-9 h-9 rounded-full overflow-hidden bg-surface-2 border border-border flex items-center justify-center shrink-0">
+                        {student.photo_url ? (
+                          <img src={student.photo_url} alt={student.full_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-text-muted font-bold text-xs bg-primary/10 text-primary">
+                            {student.full_name?.charAt(0).toUpperCase() || 'S'}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm font-bold text-text-primary">
                       {student.full_name}
                     </td>

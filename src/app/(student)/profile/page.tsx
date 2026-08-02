@@ -5,6 +5,7 @@ import ProfileCard from '@/components/student/ProfileCard';
 import SecurityCard from '@/components/student/SecurityCard';
 import { redirect } from 'next/navigation';
 import StudentAnalytics from '@/components/student/StudentAnalytics';
+import { getSignedUrl } from '@/lib/storage/signed-urls';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default async function ProfilePage() {
       full_name,
       roll_number,
       phone,
+      photo_url,
       batch_id,
       batches (
         id,
@@ -43,6 +45,8 @@ export default async function ProfilePage() {
 
   const batchesData: any = profile?.batches;
   const batchName = (Array.isArray(batchesData) ? batchesData[0]?.name : batchesData?.name) || 'Unassigned';
+
+  const photoUrl = profile?.photo_url ? await getSignedUrl(profile.photo_url, 3600) : null;
 
   if (!profile) {
     console.error(`[CRITICAL_IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: profile_page\nOrigin: server_component_page\nPath: /profile\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nError: PROFILE_RESOLUTION_FAILED\nTimestamp: ${new Date().toISOString()}`);
@@ -56,7 +60,8 @@ export default async function ProfilePage() {
     fullName: profile?.full_name || user.email || 'PROFILE_RESOLUTION_FAILED',
     rollNumber: profile?.roll_number || 'Unassigned',
     email: user.email || '',
-    batchName
+    batchName,
+    photoUrl,
   };
 
   return (

@@ -6,6 +6,8 @@ import SyncIndicator from './SyncIndicator';
 import { Plane } from 'lucide-react';
 import WatermarkOverlay from './WatermarkOverlay';
 
+import { ExamStudentIdentity } from './ExamStudentIdentity';
+
 interface Props {
   examTitle: string;
   currentQuestionIndex: number;
@@ -19,6 +21,13 @@ interface Props {
   studentFullName?: string;
   studentRollNumber?: string;
   studentEmail?: string;
+  studentIdentity?: {
+    full_name: string;
+    roll_number: string;
+    batch_name: string;
+    email: string;
+    photo_url: string | null;
+  };
   children: React.ReactNode;
   sidebar: React.ReactNode;
 }
@@ -34,26 +43,41 @@ export const ExamLayout = React.memo(function ExamLayout({
   showWarningBanner,
   onDismissWarning,
   studentEmail,
+  studentIdentity,
   children,
   sidebar
 }: Props) {
   return (
     <div className="exam-container bg-background">
-      <WatermarkOverlay email={studentEmail || 'student@aviora.com'} />
+      <WatermarkOverlay email={studentEmail || studentIdentity?.email || 'student@aviora.com'} />
 
       {/* Header */}
-      <header className="col-span-2 flex items-center justify-between px-6 bg-surface border-b border-border shadow-sm z-10">
-        <div className="flex items-center gap-2 text-primary font-bold tracking-tight">
-          <Plane className="w-5 h-5 fill-primary" />
-          <span>AVIORA <span className="text-text-muted font-normal text-sm ml-1">Portal</span></span>
+      <header className="col-span-2 flex items-center justify-between px-6 py-2 min-h-[64px] bg-surface border-b border-border shadow-xs z-10 gap-4">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-7 w-auto object-contain" />
+          <span className="text-base font-black tracking-tight text-text-primary">
+            AVIORA <span className="text-text-muted font-normal text-xs ml-0.5">Portal</span>
+          </span>
         </div>
         
-        <div className="flex-1 flex justify-center items-center text-sm font-medium text-text-primary">
+        <div className="flex-1 flex justify-center items-center text-sm font-medium text-text-primary truncate">
           {examTitle} <span className="mx-2 text-text-muted">·</span> Q {currentQuestionIndex + 1}/{totalQuestions}
         </div>
         
-        <div className="flex justify-end min-w-[120px]">
+        <div className="flex items-center justify-end gap-5 shrink-0">
           <ExamTimer expiresAt={expiresAt} clockOffset={clockOffset} />
+
+          {studentIdentity && (
+            <div className="border-l border-border pl-5">
+              <ExamStudentIdentity
+                fullName={studentIdentity.full_name}
+                rollNumber={studentIdentity.roll_number}
+                batchName={studentIdentity.batch_name}
+                email={studentIdentity.email}
+                photoUrl={studentIdentity.photo_url}
+              />
+            </div>
+          )}
         </div>
       </header>
 

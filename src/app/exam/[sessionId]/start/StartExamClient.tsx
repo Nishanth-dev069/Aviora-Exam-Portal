@@ -71,6 +71,7 @@ export default function StartExamClient({ examId }: { examId: string }) {
         exam_subject: data.exam.subject || '',
         duration_minutes: data.exam.duration_minutes,
         question_ids: data.questions.map((q: any) => q.id),
+        student_identity: data.student_identity,
       });
 
       // 2. Write questions
@@ -78,6 +79,8 @@ export default function StartExamClient({ examId }: { examId: string }) {
         question_id: q.id,
         session_id: data.session.id,
         content: q.content,
+        content_image_url: q.content_image_url || null,
+        explanation_image_url: q.explanation_image_url || null,
         options: q.options,
       }));
       await db.questions.bulkPut(localQuestions);

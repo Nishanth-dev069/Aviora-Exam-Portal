@@ -6,22 +6,38 @@ interface ProfileData {
   rollNumber: string;
   email: string;
   batchName: string;
+  photoUrl?: string | null;
 }
 
 export default function ProfileCard({ student }: { student: ProfileData }) {
+  const initial = (student.fullName || 'S').charAt(0).toUpperCase();
+
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-5 gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-black text-text-primary tracking-tight">{student.fullName}</h2>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
-              <UserCheck className="w-3.5 h-3.5" />
-              Student Profile
-            </span>
+        <div className="flex items-center gap-4">
+          {/* Photo Avatar */}
+          <div className="w-14 h-14 rounded-full overflow-hidden bg-surface-2 border-2 border-border flex items-center justify-center shrink-0 shadow-xs">
+            {student.photoUrl ? (
+              <img src={student.photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold text-xl">
+                {initial}
+              </div>
+            )}
           </div>
-          <p className="text-xs font-medium text-text-secondary mt-1">Academic identity and account information</p>
+
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-black text-text-primary tracking-tight">{student.fullName}</h2>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+                <UserCheck className="w-3.5 h-3.5" />
+                Student Profile
+              </span>
+            </div>
+            <p className="text-xs font-medium text-text-secondary mt-1">Academic identity and account information</p>
+          </div>
         </div>
       </div>
 

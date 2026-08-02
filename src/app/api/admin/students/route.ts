@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getSignedUrl } from '@/lib/storage/signed-urls';
 
 async function verifyAdmin() {
   const cookieStore = await cookies();
@@ -188,9 +189,17 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Generate signed URLs for student photos
+  const formattedListWithPhotos = await Promise.all(
+    formattedList.map(async (s: any) => ({
+      ...s,
+      photo_url: s.photo_url ? await getSignedUrl(s.photo_url, 3600) : null,
+    }))
+  );
+
   return NextResponse.json({
-    students: formattedList,
-    data: formattedList,
+    students: formattedListWithPhotos,
+    data: formattedListWithPhotos,
     count: count ?? formattedList.length,
     page,
     pageSize

@@ -29,9 +29,12 @@ interface Props {
   onSuccess: () => void;
 }
 
+import { StudentPhotoUpload } from './StudentPhotoUpload';
+
 export default function CreateStudentModal({ isOpen, onClose, onSuccess }: Props) {
   const [batches, setBatches] = useState<{id: string, name: string}[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, setError } = useForm<FormData>({
     resolver: zodResolver(createSchema)
@@ -41,6 +44,7 @@ export default function CreateStudentModal({ isOpen, onClose, onSuccess }: Props
     if (isOpen) {
       reset();
       setServerError(null);
+      setPhotoFile(null);
       // Fetch batches for dropdown
       fetch('/api/admin/batches?pageSize=100')
         .then(res => res.json())
@@ -82,6 +86,20 @@ export default function CreateStudentModal({ isOpen, onClose, onSuccess }: Props
         return;
       }
 
+      const newStudentId = result.data?.id || result.data?.user_id || result.student?.id;
+      if (photoFile && newStudentId) {
+        try {
+          const form = new FormData();
+          form.append('photo', photoFile);
+          await fetch(`/api/admin/students/${newStudentId}/photo`, {
+            method: 'POST',
+            body: form,
+          });
+        } catch (photoErr) {
+          console.error('Failed to upload student photo during creation', photoErr);
+        }
+      }
+
       onSuccess();
       onClose();
     } catch {
@@ -100,8 +118,12 @@ export default function CreateStudentModal({ isOpen, onClose, onSuccess }: Props
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
           
+          <StudentPhotoUpload
+            onPhotoChange={(file) => setPhotoFile(file)}
+          />
+
           {serverError && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm font-medium flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />

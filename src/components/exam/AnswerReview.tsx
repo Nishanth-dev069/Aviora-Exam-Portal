@@ -7,6 +7,8 @@ import { Check, X, HelpCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 interface ResultQuestion {
   question_id: string;
   question_content: string;
+  content_image_url?: string | null;
+  explanation_image_url?: string | null;
   selected_option_id: string | null;
   selected_option_content: string | null;
   correct_option_id: string;
@@ -99,6 +101,16 @@ export default function AnswerReview({ questions, examTitle, onBack }: Props) {
             dangerouslySetInnerHTML={{ __html: q.question_content }} 
           />
 
+          {q.content_image_url && (
+            <div className="mt-4 mb-2">
+              <img
+                src={q.content_image_url}
+                alt="Question diagram"
+                className="max-h-72 rounded-xl border border-border object-contain bg-surface-2 w-full"
+              />
+            </div>
+          )}
+
           <div className="space-y-4 mt-8">
             
             {q.is_unanswered && (
@@ -132,12 +144,23 @@ export default function AnswerReview({ questions, examTitle, onBack }: Props) {
 
           </div>
 
-          {q.explanation && (
+          {(q.explanation || q.explanation_image_url) && (
             <div className="mt-12 bg-surface-2 rounded-xl p-6 border border-border">
               <div className="flex items-center gap-2 text-sm font-bold text-text-secondary uppercase mb-3">
                 <span className="text-lg">💡</span> Explanation
               </div>
-              <div className="text-text-primary leading-relaxed text-sm" dangerouslySetInnerHTML={{ __html: q.explanation }} />
+              {q.explanation && (
+                <div className="text-text-primary leading-relaxed text-sm" dangerouslySetInnerHTML={{ __html: q.explanation }} />
+              )}
+              {q.explanation_image_url && (
+                <div className="mt-4">
+                  <img
+                    src={q.explanation_image_url}
+                    alt="Explanation diagram"
+                    className="max-h-72 rounded-xl border border-border object-contain bg-surface w-full"
+                  />
+                </div>
+              )}
             </div>
           )}
 

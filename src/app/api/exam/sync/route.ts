@@ -63,8 +63,8 @@ export async function POST(request: Request) {
       }
     );
 
-    // Optimization 2: Call consolidated RPC for session validation + answers upsert + security event recording
-    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('sync_exam_answers', {
+    // Execute consolidated RPC for session validation + answers upsert + security event recording
+    const { data: rpcResult, error: rpcError } = await supabaseAnon.rpc('sync_exam_answers', {
       p_session_id: session_id,
       p_sync_id: sync_id,
       p_answers: answers,
@@ -73,6 +73,9 @@ export async function POST(request: Request) {
     });
 
     if (rpcError) {
+      if (rpcError.message.includes('UNAUTHORIZED')) {
+        return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }, { status: 401 });
+      }
       if (rpcError.message.includes('SESSION_FORBIDDEN')) {
         return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Session not found or forbidden' } }, { status: 403 });
       }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Filter, MoreHorizontal, Plus, ChevronLeft, ChevronRight, Loader2, BookOpen, Download, ArrowLeft } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Plus, ChevronLeft, ChevronRight, Loader2, BookOpen, Download, ArrowLeft, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/Skeleton';
 import Link from 'next/link';
@@ -13,7 +13,18 @@ interface Props {
   bankSubject: string;
 }
 
-export type QuestionType = { id: string, text: string, subject: string, topic: string, difficulty: string, tags: string[], explanation: string, question_options: { id: string, text: string, is_correct: boolean }[] };
+export type QuestionType = {
+  id: string;
+  text: string;
+  subject: string;
+  topic: string;
+  difficulty: string;
+  tags: string[];
+  explanation: string;
+  content_image_url?: string | null;
+  explanation_image_url?: string | null;
+  question_options: { id: string; text: string; is_correct: boolean }[];
+};
 
 export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
   const [questions, setQuestions] = useState<QuestionType[]>([]);
@@ -189,9 +200,25 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
                       {displayIndex}
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-text-primary line-clamp-2 max-w-xl" title={q.text}>
-                        {q.text}
-                      </p>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium text-text-primary line-clamp-2 max-w-xl" title={q.text}>
+                          {q.text}
+                        </p>
+                        {(q.content_image_url || q.explanation_image_url) && (
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {q.content_image_url && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                <ImageIcon className="w-3 h-3" /> Question Image
+                              </span>
+                            )}
+                            {q.explanation_image_url && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                                <ImageIcon className="w-3 h-3" /> Explanation Image
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-text-secondary font-medium">
                       {q.topic}

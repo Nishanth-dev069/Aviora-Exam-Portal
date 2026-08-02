@@ -167,6 +167,8 @@ export interface ResultData {
 export interface ResultQuestion {
   question_id: string;
   question_content: string;
+  content_image_url?: string | null;
+  explanation_image_url?: string | null;
   selected_option_id: string | null;
   selected_option_content: string | null;
   correct_option_id: string;

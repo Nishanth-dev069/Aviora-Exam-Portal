@@ -41,6 +41,19 @@ export const QuestionPanel = React.memo(function QuestionPanel({
           <span className="font-bold text-primary mt-0.5">{questionNumber}.</span>
           <span dangerouslySetInnerHTML={{ __html: question.content }} />
         </h2>
+
+        {question.content_image_url && (
+          <div className="mt-4 mb-2 pl-8">
+            <img
+              src={question.content_image_url}
+              alt="Question diagram"
+              className="max-h-72 rounded-xl border border-border object-contain bg-surface-2 select-none pointer-events-none"
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+              onDragStart={(e) => e.preventDefault()}
+            />
+          </div>
+        )}
       </div>
 
       {/* Options */}

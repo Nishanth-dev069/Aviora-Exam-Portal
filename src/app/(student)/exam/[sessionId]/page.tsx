@@ -62,16 +62,24 @@ export default function ExamPage() {
   const [lockoutSubmitError, setLockoutSubmitError] = useState<string | null>(null);
   const violationAutoSubmitTriggered = useRef(false);
 
-  // Student details for Watermark
+  // Student details for Watermark & Header
   const [studentInfo, setStudentInfo] = useState({
     studentName: 'Student',
     email: 'student@example.com',
     rollNumber: 'STU-123',
   });
 
+  const [studentIdentity, setStudentIdentity] = useState<{
+    full_name: string;
+    roll_number: string;
+    batch_name: string;
+    email: string;
+    photo_url: string | null;
+  } | null>(null);
+
   const syncEngineRef = useRef<SyncEngine | null>(null);
 
-  // Fetch real student info for watermark
+  // Fetch real student info for watermark and header display
   useEffect(() => {
     async function fetchStudentProfile() {
       try {
@@ -83,14 +91,27 @@ export default function ExamPage() {
         if (user) {
           const { data: profile } = await supabase
             .from('student_profiles')
-            .select('full_name, roll_number')
+            .select('full_name, roll_number, photo_url, batch_id, batches(name)')
             .eq('user_id', user.id)
             .maybeSingle();
 
+          const name = profile?.full_name || user.user_metadata?.full_name || user.email || 'Student';
+          const email = user.email || 'student@example.com';
+          const roll = profile?.roll_number || 'STU-123';
+          const batch = (profile?.batches as any)?.name || '';
+
           setStudentInfo({
-            studentName: profile?.full_name || user.user_metadata?.full_name || user.email || 'Student',
-            email: user.email || 'student@example.com',
-            rollNumber: profile?.roll_number || 'STU-123',
+            studentName: name,
+            email,
+            rollNumber: roll,
+          });
+
+          setStudentIdentity(prev => prev || {
+            full_name: name,
+            roll_number: roll,
+            batch_name: batch,
+            email,
+            photo_url: null,
           });
         }
       } catch (err) {
@@ -533,6 +554,7 @@ export default function ExamPage() {
         showWarningBanner={showWarningBanner}
         onDismissWarning={handleDismissWarning}
         studentEmail={studentInfo.email}
+        studentIdentity={session?.student_identity || studentIdentity}
         sidebar={
           <NavigationGrid
             questionIds={session.question_ids}

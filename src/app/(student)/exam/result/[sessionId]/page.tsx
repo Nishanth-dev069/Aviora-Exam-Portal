@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import ResultTabs from '@/components/exam/ResultTabs';
 import { LeaderboardEntry } from '@/components/exam/Leaderboard';
+import { getSignedUrl } from '@/lib/storage/signed-urls';
 
 export default async function ResultPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
@@ -155,8 +156,40 @@ export default async function ResultPage({ params }: { params: Promise<{ session
     totalSubmissions
   };
 
+  const rawResultQuestions = result.result_data?.questions || [];
+  const resultQuestionIds = rawResultQuestions.map((q: any) => q.question_id).filter(Boolean);
+
+  const questionImgMap = new Map<string, { content_image_url: string | null; explanation_image_url: string | null }>();
+  if (resultQuestionIds.length > 0) {
+    const { data: dbQuestions } = await supabaseAdmin
+      .from('questions')
+      .select('id, content_image_url, explanation_image_url')
+      .in('id', resultQuestionIds);
+
+    (dbQuestions || []).forEach((q: any) => {
+      questionImgMap.set(q.id, {
+        content_image_url: q.content_image_url,
+        explanation_image_url: q.explanation_image_url,
+      });
+    });
+  }
+
+  const reviewQuestionsWithSignedUrls = await Promise.all(
+    rawResultQuestions.map(async (q: any) => {
+      const dbImg = questionImgMap.get(q.question_id);
+      const rawContentPath = q.content_image_url || dbImg?.content_image_url || null;
+      const rawExpPath = q.explanation_image_url || dbImg?.explanation_image_url || null;
+
+      return {
+        ...q,
+        content_image_url: rawContentPath ? await getSignedUrl(rawContentPath, 7200) : null,
+        explanation_image_url: rawExpPath ? await getSignedUrl(rawExpPath, 7200) : null,
+      };
+    })
+  );
+
   const reviewProps = {
-    questions: result.result_data?.questions || []
+    questions: reviewQuestionsWithSignedUrls
   };
 
   return (
