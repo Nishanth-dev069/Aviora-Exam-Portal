@@ -82,8 +82,9 @@ export async function POST(request: NextRequest) {
       .eq('id', activeSessionId)
       .then();
 
+    const requestId = request.headers.get('x-request-id') || 'unknown';
+
     if (ENABLE_PROFILING) {
-      const requestId = request.headers.get('x-request-id') || 'unknown';
       const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
       console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: exam_heartbeat\nOrigin: route_handler\nPath: /api/exam/heartbeat\nMethod: POST\nIs RSC: ${isRsc}\nSource: Supabase Auth Session\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nActive Session ID: ${activeSessionId || 'none'}\nTimestamp: ${new Date().toISOString()}`);
     }

@@ -134,57 +134,13 @@ export default function StudentDashboard() {
     };
   }, [data?.scheduledExams, fetchDashboardData]);
 
-  if (loading && !data) {
-    return (
-      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-10 pb-12 animate-pulse">
-        {/* Banner Skeleton */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-6 gap-4">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 rounded-lg" />
-            <Skeleton className="h-4 w-40 rounded-md" />
-          </div>
-          <Skeleton className="h-8 w-32 rounded-full self-start sm:self-center" />
-        </div>
+  const profile = data?.profile;
+  const scheduledExams = data?.scheduledExams || [];
+  const practiceExams = data?.practiceExams || [];
+  const recentResults = data?.recentResults || [];
+  const examStatusMap = data?.examStatusMap || {};
 
-        {/* Scheduled Exams Section Skeleton */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-4 w-36 rounded" />
-            <Skeleton className="h-4 w-16 rounded" />
-          </div>
-          <div className="space-y-4">
-            <CardSkeleton />
-            <CardSkeleton />
-          </div>
-        </div>
-
-        {/* Practice Exams Section Skeleton */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-4 w-44 rounded" />
-            <Skeleton className="h-4 w-16 rounded" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-          </div>
-        </div>
-
-        {/* Recent Results Section Skeleton */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-4 w-32 rounded" />
-            <Skeleton className="h-4 w-16 rounded" />
-          </div>
-          <TableSkeleton rows={3} cols={4} />
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (error && !data) {
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <div className="p-6 bg-danger/10 border border-danger/20 text-danger rounded-xl flex items-center gap-3 font-bold">
@@ -195,10 +151,8 @@ export default function StudentDashboard() {
     );
   }
 
-  const { profile, practiceExams, scheduledExams, recentResults, examStatusMap } = data;
-
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-10 pb-12 animate-in fade-in duration-300 relative">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-10 pb-12 relative">
       {/* Toast notification for newly active exam */}
       {toastMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-success text-white px-6 py-3 rounded-xl shadow-xl font-bold flex items-center gap-2 animate-in slide-in-from-top-4 border border-white/20">
@@ -208,27 +162,31 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* Welcome Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-6 gap-4">
+      {/* Welcome Banner - Rendered statically for fast LCP */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-6 gap-4 min-h-[76px]">
         <div>
           <h1 className="text-3xl font-black text-text-primary tracking-tight">
-            Welcome back, {profile?.full_name || 'Student'}
+            Welcome back{profile?.full_name ? `, ${profile.full_name}` : ''}
           </h1>
-          {profile?.batch_name && (
+          {loading && !profile ? (
+            <Skeleton className="h-4 w-40 rounded-md mt-2" />
+          ) : profile?.batch_name ? (
             <p className="text-sm font-medium text-text-secondary mt-1">
               Batch: <span className="text-primary font-bold">{profile.batch_name}</span>
             </p>
-          )}
+          ) : null}
         </div>
-        {profile?.roll_number && profile.roll_number !== 'Unassigned' && (
+        {loading && !profile ? (
+          <Skeleton className="h-8 w-28 rounded-full self-start sm:self-center" />
+        ) : profile?.roll_number && profile.roll_number !== 'Unassigned' ? (
           <div className="text-xs font-bold text-text-secondary bg-surface-2 border border-border px-3.5 py-2 rounded-full self-start sm:self-center">
             Roll No: <span className="text-text-primary">{profile.roll_number}</span>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Scheduled Exams Section */}
-      <section className="space-y-4">
+      <section className="space-y-4 min-h-[160px]">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold tracking-widest text-text-muted uppercase">
             Scheduled Exams
@@ -238,7 +196,11 @@ export default function StudentDashboard() {
           </Link>
         </div>
 
-        {scheduledExams.length === 0 ? (
+        {loading && !data ? (
+          <div className="space-y-4">
+            <CardSkeleton />
+          </div>
+        ) : scheduledExams.length === 0 ? (
           <div className="bg-surface rounded-xl p-6 text-center text-text-muted border border-border border-dashed">
             <p className="text-sm font-medium">No upcoming exams scheduled</p>
           </div>
@@ -256,20 +218,29 @@ export default function StudentDashboard() {
       </section>
 
       {/* Practice Exams Section */}
-      <section className="space-y-4">
+      <section className="space-y-4 min-h-[200px]">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold tracking-widest text-text-muted uppercase flex items-center gap-1.5">
             <span>Practice Exams</span>
-            <span className="text-[11px] font-semibold text-text-muted normal-case">
-              ({practiceExams.length} available)
-            </span>
+            {practiceExams.length > 0 && (
+              <span className="text-[11px] font-semibold text-text-muted normal-case">
+                ({practiceExams.length} available)
+              </span>
+            )}
           </h2>
           <Link href="/exams/practice" className="text-xs font-bold text-primary hover:underline">
             View All →
           </Link>
         </div>
 
-        {practiceExams.length === 0 ? (
+        {loading && !data ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : practiceExams.length === 0 ? (
           <div className="bg-surface rounded-xl p-6 text-center text-text-muted border border-border border-dashed">
             No practice exams available yet. Check back soon.
           </div>
@@ -287,7 +258,7 @@ export default function StudentDashboard() {
       </section>
 
       {/* Recent Results Section */}
-      <section className="space-y-4">
+      <section className="space-y-4 min-h-[160px]">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold tracking-widest text-text-muted uppercase">
             Recent Results
@@ -297,7 +268,9 @@ export default function StudentDashboard() {
           </Link>
         </div>
 
-        {recentResults.length === 0 ? (
+        {loading && !data ? (
+          <TableSkeleton rows={2} cols={4} />
+        ) : recentResults.length === 0 ? (
           <div className="bg-surface rounded-xl p-8 text-center text-text-muted border border-border border-dashed flex flex-col items-center">
             <FileText className="w-8 h-8 opacity-30 mb-2" />
             <p className="text-sm font-medium">
