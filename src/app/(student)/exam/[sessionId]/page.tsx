@@ -19,6 +19,7 @@ import NavigationGrid from '@/components/exam/NavigationGrid';
 import SubmitModal from '@/components/exam/SubmitModal';
 import WatermarkOverlay from '@/components/exam/WatermarkOverlay';
 import ViolationLockout from '@/components/exam/ViolationLockout';
+import { QuestionNavigationTimer } from '@/components/exam/QuestionNavigationTimer';
 import { useFullscreenEnforcement } from '@/hooks/useFullscreenEnforcement';
 import FullscreenBlocker from '@/components/exam/FullscreenBlocker';
 
@@ -35,6 +36,10 @@ export default function ExamPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Transient UI-only state — never stored in Zustand, Dexie, or server state.
+  // Defaults to true so the very first question is also locked.
+  const [navigationLocked, setNavigationLocked] = useState(true);
   
   const [securityWarnings, setSecurityWarnings] = useState(0);
   const [showWarningBanner, setShowWarningBanner] = useState(false);
@@ -470,7 +475,7 @@ export default function ExamPage() {
   const stats = {
     total: questions.length,
     answered: answers.filter(a => a.selected_option_id !== null).length,
-    unanswered: questions.length - answers.filter(a => a.selected_option_id !== null).length,
+    unanswered: answers.filter(a => a.selected_option_id === null && !a.is_marked_for_review).length,
     marked: answers.filter(a => a.is_marked_for_review).length,
   };
 
@@ -562,6 +567,14 @@ export default function ExamPage() {
             answers={answers}
             onNavigate={handleNavigate}
             onSubmitClick={handleSubmitClick}
+            navigationLocked={navigationLocked}
+            timerSlot={
+              <QuestionNavigationTimer
+                key={currentQ.question_id}
+                questionId={currentQ.question_id}
+                onLockStateChange={setNavigationLocked}
+              />
+            }
           />
         }
       >
@@ -575,6 +588,7 @@ export default function ExamPage() {
           onNext={handleNext}
           isFirst={currentIndex === 0}
           isLast={currentIndex === questions.length - 1}
+          navigationLocked={navigationLocked}
         />
       </ExamLayout>
 

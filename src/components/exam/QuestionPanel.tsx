@@ -15,6 +15,7 @@ interface Props {
   onNext: () => void;
   isFirst: boolean;
   isLast: boolean;
+  navigationLocked?: boolean;
 }
 
 export const QuestionPanel = React.memo(function QuestionPanel({ 
@@ -26,7 +27,8 @@ export const QuestionPanel = React.memo(function QuestionPanel({
   onPrev, 
   onNext, 
   isFirst, 
-  isLast 
+  isLast,
+  navigationLocked = false,
 }: Props) {
 
   const selectedOptionId = answer?.selected_option_id || null;
@@ -109,15 +111,21 @@ export const QuestionPanel = React.memo(function QuestionPanel({
         <div className="flex items-center gap-3">
           <button
             onClick={onPrev}
-            disabled={isFirst}
-            className="px-6 py-2.5 rounded-lg border border-border bg-surface text-text-primary text-sm font-medium hover:bg-surface-2 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+            disabled={isFirst || navigationLocked}
+            className={cn(
+              'px-6 py-2.5 rounded-lg border border-border bg-surface text-text-primary text-sm font-medium hover:bg-surface-2 disabled:opacity-50 disabled:pointer-events-none transition-colors',
+              navigationLocked ? 'opacity-40 cursor-not-allowed' : ''
+            )}
           >
             ← Previous
           </button>
           <button
             onClick={onNext}
-            disabled={isLast}
-            className="px-6 py-2.5 rounded-lg border border-transparent bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-50 disabled:pointer-events-none transition-colors"
+            disabled={isLast || navigationLocked}
+            className={cn(
+              'px-6 py-2.5 rounded-lg border border-transparent bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-50 disabled:pointer-events-none transition-colors',
+              navigationLocked ? 'opacity-40 cursor-not-allowed' : ''
+            )}
           >
             Next Question →
           </button>

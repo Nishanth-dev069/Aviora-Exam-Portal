@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+import { sha256Hex } from '@/lib/auth/hash';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,10 +34,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (user) {
-      const sessionToken = request.cookies.get('aviora_session_token')?.value;
+      const deviceSessionUUID = request.cookies.get('aviora-device-session')?.value;
 
-      if (sessionToken) {
-        const tokenHash = await hashToken(sessionToken);
+      if (deviceSessionUUID) {
+        const tokenHash = await sha256Hex(deviceSessionUUID);
         await supabaseAdmin
           .from('active_sessions')
           .update({ status: 'terminated', updated_at: new Date().toISOString() })
@@ -73,8 +66,17 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
 
-    // Clear session cookie
-    response.cookies.set('aviora_session_token', '', {
+    // Clear device session cookie
+    response.cookies.set('aviora-device-session', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 0,
+      path: '/',
+    });
+
+    // Clear admin inactivity cookie
+    response.cookies.set('aviora-admin-last-active', '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('[Logout API Error]', err);
     const response = NextResponse.json({ success: true }, { status: 200 });
-    response.cookies.set('aviora_session_token', '', { maxAge: 0, path: '/' });
+    response.cookies.set('aviora-device-session', '', { maxAge: 0, path: '/' });
     return response;
   }
 }

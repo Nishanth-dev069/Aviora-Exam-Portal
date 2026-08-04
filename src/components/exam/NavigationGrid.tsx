@@ -10,9 +10,11 @@ interface Props {
   answers: IDBAnswer[];
   onNavigate: (index: number) => void;
   onSubmitClick: () => void;
+  navigationLocked?: boolean;
+  timerSlot?: React.ReactNode;
 }
 
-export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, currentIndex, answers, onNavigate, onSubmitClick }: Props) {
+export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, currentIndex, answers, onNavigate, onSubmitClick, navigationLocked = false, timerSlot }: Props) {
   const answered = answers.filter(a => a.selected_option_id !== null).length;
   const marked = answers.filter(a => a.is_marked_for_review).length;
   const unanswered = questionIds.length - answered;
@@ -20,6 +22,8 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
   return (
     <div className="flex flex-col h-full w-full bg-surface-2 border-l border-border p-4">
       
+      {timerSlot && <div>{timerSlot}</div>}
+
       <div className="mb-6 space-y-2 text-sm font-medium">
         <h3 className="text-text-secondary uppercase tracking-wider text-xs mb-3">Question Status</h3>
         <div className="flex items-center justify-between">
@@ -57,7 +61,8 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
             return (
               <button
                 key={qid}
-                onClick={() => onNavigate(idx)}
+                onClick={() => !navigationLocked && onNavigate(idx)}
+                disabled={navigationLocked}
                 className={cn(
                   'w-9 h-9 rounded-md text-sm font-medium transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                   isCurrent 
@@ -68,7 +73,8 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
                         ? 'bg-success text-white'
                         : isVisited
                           ? 'bg-surface border border-border text-text-muted'
-                          : 'bg-white border border-border text-text-muted hover:bg-surface-2'
+                          : 'bg-white border border-border text-text-muted hover:bg-surface-2',
+                  navigationLocked ? 'pointer-events-none opacity-40' : 'cursor-pointer'
                 )}
               >
                 {idx + 1}

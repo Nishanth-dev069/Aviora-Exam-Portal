@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
+import { AdminIdleGuard } from '@/components/admin/AdminIdleGuard';
 import { HeartbeatProvider } from '@/components/ui/HeartbeatProvider';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 
@@ -51,6 +52,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex h-screen bg-background overflow-hidden">
       <OfflineBanner />
       <HeartbeatProvider />
+      <AdminIdleGuard />
       <AdminSidebar adminName={adminName} />
       <main className="flex-1 overflow-y-auto relative">
         {children}

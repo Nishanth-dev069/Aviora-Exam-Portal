@@ -2,16 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { sha256Hex } from '@/lib/auth/hash';
 
 export const dynamic = 'force-dynamic';
-
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,12 +28,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
     }
 
-    const sessionToken = cookieStore.get('aviora_session_token')?.value;
-    if (!sessionToken) {
+    const deviceSessionUUID = cookieStore.get('aviora-device-session')?.value;
+    if (!deviceSessionUUID) {
       return NextResponse.json({ error: { code: 'SESSION_TERMINATED' } }, { status: 401 });
     }
 
-    const tokenHash = await hashToken(sessionToken);
+    const tokenHash = await sha256Hex(deviceSessionUUID);
 
     const { data: activeSession } = await supabaseAdmin
       .from('active_sessions')
@@ -58,11 +51,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: { code: 'SESSION_EXPIRED' } }, { status: 401 });
     }
 
-    // Optimization 3: Fire-and-forget last_active_at update
+    // Extend session expiry by 24 hours from now (fire-and-forget)
     const nowIso = new Date().toISOString();
+    const newExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     supabaseAdmin
       .from('active_sessions')
-      .update({ last_active_at: nowIso })
+      .update({ last_active_at: nowIso, expires_at: newExpiresAt })
       .eq('id', activeSession.id)
       .then()
       .catch(console.error);

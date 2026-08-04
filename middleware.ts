@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-
-async function hashTokenEdge(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+import { sha256Hex } from '@/lib/auth/hash';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -99,7 +92,7 @@ export async function middleware(req: NextRequest) {
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('redirect', pathname);
     const redirectRes = NextResponse.redirect(loginUrl);
-    redirectRes.cookies.delete('aviora_session_token');
+    redirectRes.cookies.delete('aviora-device-session');
     return redirectRes;
   }
 
@@ -124,7 +117,7 @@ export async function middleware(req: NextRequest) {
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('error', 'session_invalid');
     const redirectRes = NextResponse.redirect(loginUrl);
-    redirectRes.cookies.delete('aviora_session_token');
+    redirectRes.cookies.delete('aviora-device-session');
     return redirectRes;
   }
 
@@ -133,16 +126,16 @@ export async function middleware(req: NextRequest) {
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('error', 'account_suspended');
     const redirectRes = NextResponse.redirect(loginUrl);
-    redirectRes.cookies.delete('aviora_session_token');
+    redirectRes.cookies.delete('aviora-device-session');
     return redirectRes;
   }
 
   // 8. Single Active Session Enforcement (for student role)
   let activeSessionMs = 0;
   if (dbUser.role === 'student') {
-    const sessionToken = req.cookies.get('aviora_session_token')?.value;
+    const deviceSessionUUID = req.cookies.get('aviora-device-session')?.value;
 
-    if (!sessionToken) {
+    if (!deviceSessionUUID) {
       if (isApi) {
         return NextResponse.json(
           { error: { code: 'UNAUTHORIZED', message: 'Session token missing.' } },
@@ -152,11 +145,11 @@ export async function middleware(req: NextRequest) {
       const loginUrl = new URL('/login', req.url);
       loginUrl.searchParams.set('error', 'session_invalid');
       const redirectRes = NextResponse.redirect(loginUrl);
-      redirectRes.cookies.delete('aviora_session_token');
+      redirectRes.cookies.delete('aviora-device-session');
       return redirectRes;
     }
 
-    const tokenHash = await hashTokenEdge(sessionToken);
+    const tokenHash = await sha256Hex(deviceSessionUUID);
 
     let tSessionStart = 0;
     if (ENABLE_PROFILING) tSessionStart = performance.now();
@@ -171,21 +164,22 @@ export async function middleware(req: NextRequest) {
     if (ENABLE_PROFILING) activeSessionMs = performance.now() - tSessionStart;
 
     if (!activeSession) {
-      // Check if session was explicitly terminated
-      const { data: terminatedSession } = await supabaseAdmin
+      // Distinguish real termination (another device is active) from expiry/invalid.
+      // This prevents false SESSION_TERMINATED errors from expired sessions.
+      const { data: otherActiveSession } = await supabaseAdmin
         .from('active_sessions')
         .select('id')
         .eq('user_id', user.id)
-        .eq('token_hash', tokenHash)
-        .eq('status', 'terminated')
+        .eq('status', 'active')
+        .limit(1)
         .maybeSingle();
 
-      const isTerminated = !!terminatedSession;
-      const errorCode = isTerminated ? 'SESSION_TERMINATED' : 'UNAUTHORIZED';
-      const errorReason = isTerminated ? 'session_terminated' : 'session_invalid';
-      const errorMessage = isTerminated
-        ? 'Your session was terminated because you logged in on another device.'
-        : 'Session not found or invalid.';
+      const isRealTermination = !!otherActiveSession;
+      const errorCode = isRealTermination ? 'SESSION_TERMINATED' : 'UNAUTHORIZED';
+      const errorReason = isRealTermination ? 'session_terminated' : 'session_invalid';
+      const errorMessage = isRealTermination
+        ? 'Your session was terminated because you logged in on another device. Your answers up to your last sync have been saved. Contact admin if this was unexpected.'
+        : 'Session not found or expired. Please log in again.';
 
       if (isApi) {
         return NextResponse.json(
@@ -197,7 +191,7 @@ export async function middleware(req: NextRequest) {
       const loginUrl = new URL('/login', req.url);
       loginUrl.searchParams.set('error', errorReason);
       const redirectRes = NextResponse.redirect(loginUrl);
-      redirectRes.cookies.delete('aviora_session_token');
+      redirectRes.cookies.delete('aviora-device-session');
       return redirectRes;
     }
 
@@ -241,6 +235,33 @@ export async function middleware(req: NextRequest) {
       }
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
+
+    // 10a. Admin inactivity timeout — 15-minute sliding window (server-side safety net)
+    // The client-side AdminIdleGuard handles the primary UX. This catches browser refreshes
+    // after the client timer was destroyed (e.g. tab reopen after 15+ min).
+    const ADMIN_IDLE_MS = 15 * 60 * 1000;
+    const lastActiveCookie = req.cookies.get('aviora-admin-last-active')?.value;
+
+    if (lastActiveCookie) {
+      const lastActive = parseInt(lastActiveCookie, 10);
+      if (!isNaN(lastActive) && Date.now() - lastActive > ADMIN_IDLE_MS) {
+        // Idle timeout exceeded — force logout
+        const loginUrl = new URL('/login', req.url);
+        loginUrl.searchParams.set('reason', 'inactivity_timeout');
+        const redirectRes = NextResponse.redirect(loginUrl);
+        redirectRes.cookies.set('aviora-admin-last-active', '', { maxAge: 0, path: '/' });
+        return redirectRes;
+      }
+    }
+
+    // Slide the timestamp forward on every allowed admin request
+    res.cookies.set('aviora-admin-last-active', String(Date.now()), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 20, // 20 min max-age — generous, server logic is the real gate
+      path: '/',
+    });
   }
 
   if (

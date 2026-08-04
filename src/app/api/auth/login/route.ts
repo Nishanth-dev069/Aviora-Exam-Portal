@@ -3,14 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { loginSchema } from '@/lib/validators';
 import { cookies } from 'next/headers';
-
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+import { sha256Hex } from '@/lib/auth/hash';
 
 export async function POST(request: Request) {
   try {
@@ -247,12 +240,12 @@ export async function POST(request: Request) {
       }
     })();
 
-    // STEP 6: Create new active_sessions row for Device B (after terminating all old ones)
-    const sessionToken = crypto.randomUUID();
-    const tokenHash = await hashToken(sessionToken);
-    const expiresAt = new Date(
-      authData.session.expires_at ? authData.session.expires_at * 1000 : Date.now() + 24 * 60 * 60 * 1000
-    ).toISOString();
+    // STEP 6: Create new active_sessions row — expires in 24 hours (extended by heartbeat)
+    // Uses a stable device session UUID independent of the Supabase JWT lifecycle.
+    // JWT rotates every ~1 hour but this UUID never changes until next login.
+    const deviceSessionUUID = crypto.randomUUID();
+    const tokenHash = await sha256Hex(deviceSessionUUID);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
 
     const { data: newSession, error: sessionError } = await supabaseAdmin
       .from('active_sessions')
@@ -318,16 +311,18 @@ export async function POST(request: Request) {
       }
     );
 
-    // Sync cookies from store and set session token cookie
+    // Sync cookies from store and set device session cookie (httpOnly — JS cannot read it)
     cookieStore.getAll().forEach((c) => {
       response.cookies.set(c.name, c.value);
     });
 
-    response.cookies.set('aviora_session_token', sessionToken, {
+    // aviora-device-session: the stable session identifier stored as hash in active_sessions.
+    // Rotation-proof: remains valid across all Supabase JWT rotations until next login.
+    response.cookies.set('aviora-device-session', deviceSessionUUID, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60,
+      maxAge: 60 * 60 * 24 * 7, // 7 days cookie lifetime — server row expires at 24h
       path: '/',
     });
 
