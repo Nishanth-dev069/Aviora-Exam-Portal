@@ -125,7 +125,9 @@ export async function GET(request: Request) {
       const batchesData: any = profileData?.batches;
       const nowIso = new Date().toISOString();
 
-      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: fallback student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profileData.full_name}\nTimestamp: ${new Date().toISOString()}`);
+      if (ENABLE_PROFILING) {
+        console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: fallback student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profileData.full_name}\nTimestamp: ${new Date().toISOString()}`);
+      }
 
       return NextResponse.json({
         serverTime: nowIso,
