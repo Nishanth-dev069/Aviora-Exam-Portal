@@ -2,16 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { sha256Hex } from '@/lib/auth/hash';
 
 export const dynamic = 'force-dynamic';
-
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 export async function POST(request: NextRequest) {
   const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
@@ -46,17 +39,17 @@ export async function POST(request: NextRequest) {
     let activeSessionId = verifiedActiveSessionId;
 
     if (!activeSessionId) {
-      const sessionToken = cookieStore.get('aviora_session_token')?.value;
-      if (!sessionToken) {
+      const deviceSessionUUID = cookieStore.get('aviora-device-session')?.value;
+      if (!deviceSessionUUID) {
         return NextResponse.json(
           { error: { code: 'SESSION_TERMINATED', message: 'Session token missing.' } },
           { status: 401 }
         );
       }
 
-      const tokenHash = await hashToken(sessionToken);
+      const tokenHash = await sha256Hex(deviceSessionUUID);
 
-      // Fallback: Check active_sessions entry
+      // Check active_sessions entry
       const { data: activeSession } = await supabaseAdmin
         .from('active_sessions')
         .select('id, status, expires_at')
@@ -67,8 +60,26 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (!activeSession) {
+        // Distinguish real termination (another device active) from invalid/expired
+        const { data: otherActiveSession } = await supabaseAdmin
+          .from('active_sessions')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle();
+
+        const isRealTermination = !!otherActiveSession;
+
         return NextResponse.json(
-          { error: { code: 'SESSION_TERMINATED', message: 'Your session was terminated. You have been logged in on another device.' } },
+          { 
+            error: { 
+              code: isRealTermination ? 'SESSION_TERMINATED' : 'UNAUTHORIZED', 
+              message: isRealTermination 
+                ? 'Your session was terminated. You have been logged in on another device.' 
+                : 'Session expired or invalid.' 
+            } 
+          },
           { status: 401 }
         );
       }
@@ -76,11 +87,13 @@ export async function POST(request: NextRequest) {
     }
 
     const nowIso = new Date().toISOString();
+    const newExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     supabaseAdmin
       .from('active_sessions')
-      .update({ last_active_at: nowIso })
+      .update({ last_active_at: nowIso, expires_at: newExpiresAt })
       .eq('id', activeSessionId)
       .then();
+
 
     const requestId = request.headers.get('x-request-id') || 'unknown';
 
