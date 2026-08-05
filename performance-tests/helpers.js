@@ -55,12 +55,8 @@ export function login(student) {
     cookieHeader = pairs.join('; ');
   }
 
-  if (res.status !== 200) {
-    console.log("================================");
-    console.log(`VU: ${exec.vu.idInTest}`);
-    console.log(`Status: ${res.status}`);
-    console.log(`Body: ${res.body}`);
-    console.log("================================");
+  if (res.status !== 200 && res.status !== 429) {
+    console.log(`[VU ${exec.vu.idInTest}] Non-200 Login Status: ${res.status}`);
   }
   return {
     res,
@@ -82,6 +78,7 @@ let vuCookieHeader = '';
 /**
  * Ensures each Virtual User (VU) authenticates ONCE, stores the JWT access token in VU memory,
  * and reuses it for all subsequent loop iterations.
+ * Includes a robust retry-backoff mechanism if initial login hits burst rate limiting.
  */
 export function getVUToken(students) {
   const student = getStudentForVU(students);
@@ -92,16 +89,29 @@ export function getVUToken(students) {
     return { token: vuToken, cookieHeader: vuCookieHeader, student: vuStudent, success: true };
   }
 
-  console.log("LOGIN CALLED", exec.vu.idInTest, exec.vu.iterationInScenario);
-  // Authenticate once for this VU
-  const authResult = login(student);
-  if (authResult.success && authResult.token) {
-    vuToken = authResult.token;
-    vuRefreshToken = authResult.refreshToken;
-    vuStudent = student;
-    vuCookieHeader = authResult.cookieHeader || '';
-    vuExpiresAt = nowSec + 3500;
-    return { token: vuToken, cookieHeader: vuCookieHeader, student: vuStudent, success: true };
+  // Stagger initial login requests slightly during rapid VU ramp-ups (e.g. 150 VU spikes)
+  if (!vuToken && exec.vu.iterationInScenario === 0) {
+    sleep(Math.random() * 1.2);
+  }
+
+  let attempts = 0;
+  const maxAttempts = 5;
+
+  while (attempts < maxAttempts) {
+    attempts++;
+
+    const authResult = login(student);
+
+    if (authResult.success && authResult.token) {
+      vuToken = authResult.token;
+      vuRefreshToken = authResult.refreshToken;
+      vuStudent = student;
+      vuCookieHeader = authResult.cookieHeader || '';
+      vuExpiresAt = nowSec + 3500;
+      return { token: vuToken, cookieHeader: vuCookieHeader, student: vuStudent, success: true };
+    }
+
+    sleep(1.5 + Math.random() * 2.0);
   }
 
   return { token: null, cookieHeader: '', student, success: false };

@@ -49,6 +49,14 @@ export async function POST(request: Request) {
     const tAuth = performance.now() - tAuthStart;
 
     if (authError || !authData.session) {
+      console.log("=== RAW SUPABASE AUTH ERROR OBJECT ===");
+      console.log("authError keys/props:", authError ? Object.getOwnPropertyNames(authError) : []);
+      console.log("authError status:", authError?.status);
+      console.log("authError name:", authError?.name);
+      console.log("authError message:", authError?.message);
+      console.log("authError full:", JSON.stringify(authError, Object.getOwnPropertyNames(authError || {}), 2));
+      console.log("======================================");
+
       const isRateLimit = authError?.status === 429;
       const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
       
