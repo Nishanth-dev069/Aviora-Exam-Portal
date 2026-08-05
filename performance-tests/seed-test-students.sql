@@ -1,0 +1,9 @@
+-- ==============================================================================
+-- NOTE: DIRECT SQL INSERTS INTO auth.users ARE DEPRECATED AND INCOMPATIBLE WITH GO-TRUE / SUPABASE AUTH.
+-- Use the official Node.js admin seeding script instead:
+--
+-- node performance-tests/seed-test-students.js
+--
+-- This script uses Supabase Auth Admin API (supabase.auth.admin.createUser)
+-- matching the exact production code path.
+-- ==============================================================================

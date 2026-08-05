@@ -22,8 +22,7 @@ function computeExamAvailability(exam: any, nowIso: string): boolean {
 }
 
 export async function GET(request: Request) {
-  const ENABLE_PROFILING = process.env.ENABLE_PROFILING === 'true';
-  const tRouteStart = ENABLE_PROFILING ? performance.now() : 0;
+  const tRouteStart = performance.now();
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -37,10 +36,12 @@ export async function GET(request: Request) {
       }
     );
 
-    // Optimization 1: Use getSession() instead of getUser()
-    const tAuthStart = ENABLE_PROFILING ? performance.now() : 0;
+    // 1. Route JWT Verification
+    const tAuthStart = performance.now();
     const { data: { session }, error: authError } = await supabase.auth.getSession();
-    const tAuthEnd = ENABLE_PROFILING ? performance.now() : 0;
+    const tAuthEnd = performance.now();
+    const authMs = tAuthEnd - tAuthStart;
+
     const user = session?.user ?? null;
     if (authError || !user) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED' } }, { status: 401 });
@@ -57,40 +58,63 @@ export async function GET(request: Request) {
       }
     );
 
-    // Optimization 2: Call consolidated RPC function
-    const tRpcStart = ENABLE_PROFILING ? performance.now() : 0;
+    // 2. RPC Consolidated Call vs Fallback
+    const tRpcStart = performance.now();
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('student_get_dashboard');
-    const tRpcEnd = ENABLE_PROFILING ? performance.now() : 0;
-    const rpcMs = ENABLE_PROFILING ? tRpcEnd - tRpcStart : 0;
-    const authMs = ENABLE_PROFILING ? tAuthEnd - tAuthStart : 0;
+    const tRpcEnd = performance.now();
+    const rpcMs = tRpcEnd - tRpcStart;
 
-    if (ENABLE_PROFILING) {
-      const totalMs = performance.now() - tRouteStart;
-      console.log(`[Dashboard API Telemetry] total=${totalMs.toFixed(1)}ms auth=${authMs.toFixed(1)}ms rpc=${rpcMs.toFixed(1)}ms fallback=${!!rpcError}`);
-    }
+    let profileDataObj: any = null;
+    let practiceExamsList: any[] = [];
+    let scheduledExamsList: any[] = [];
+    let recentResultsList: any[] = [];
+    let examStatusMapObj: Record<string, any> = {};
+    let nowIsoStr = new Date().toISOString();
+
+    let tDashboardQuery = rpcMs;
+    let tRecentExamsQuery = rpcMs;
+    let tResultsQuery = rpcMs;
+    let tStatisticsQuery = rpcMs;
 
     if (rpcError || !rpcData) {
-      // Fallback in case migration RPC is not applied in current DB environment yet
+      // Fallback: Individual Queries
+      const tFallbackStart = performance.now();
       const [profileResult, practiceExamsResult, enrollmentsResult, recentResultsResult] = await Promise.all([
         supabaseAdmin.from('student_profiles').select('id, full_name, roll_number, photo_url, batch_id, batches(id, name)').eq('user_id', user.id).maybeSingle(),
         supabaseAdmin.from('exams').select('id, title, subject, type, duration_minutes, total_questions, marks_per_question, negative_marks, settings, status, scheduled_at, ends_at').eq('type', 'practice').eq('status', 'active').is('deleted_at', null).order('created_at', { ascending: false }),
         supabaseAdmin.from('exam_enrollments').select('exam_id, exams!inner(id, title, subject, type, duration_minutes, total_questions, marks_per_question, negative_marks, status, scheduled_at, ends_at, settings, deleted_at)').eq('student_id', user.id).eq('exams.type', 'scheduled').in('exams.status', ['scheduled', 'active', 'completed']),
         supabaseAdmin.from('exam_results').select('id, session_id, exam_id, percentage, total_score, max_score, correct_count, incorrect_count, is_passed, computed_at, exams(id, title, subject, type)').eq('student_id', user.id).order('computed_at', { ascending: false }).limit(5),
       ]);
+      const tFallbackEnd = performance.now();
+      const fallbackMs = tFallbackEnd - tFallbackStart;
 
-      const practiceExams = practiceExamsResult.data || [];
+      tDashboardQuery = fallbackMs;
+      tRecentExamsQuery = fallbackMs;
+      tResultsQuery = fallbackMs;
+      tStatisticsQuery = fallbackMs;
+
+      profileDataObj = profileResult.data;
+      if (!profileDataObj) {
+        return NextResponse.json(
+          { error: { code: 'PROFILE_RESOLUTION_FAILED', message: 'Failed to resolve student profile identity.' } },
+          { status: 500, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      practiceExamsList = practiceExamsResult.data || [];
       const rawScheduled = (enrollmentsResult.data || []).map((e: any) => Array.isArray(e.exams) ? e.exams[0] : e.exams).filter((e: any) => e && !e.deleted_at && e.type === 'scheduled');
       rawScheduled.sort((a: any, b: any) => (b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0) - (a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0));
-      
-      const allExamIds = [...practiceExams.map(e => e.id), ...rawScheduled.map((e: any) => e.id)];
+      scheduledExamsList = rawScheduled;
+      recentResultsList = recentResultsResult.data || [];
+
+      const allExamIds = [...practiceExamsList.map(e => e.id), ...scheduledExamsList.map((e: any) => e.id)];
       const sessions = allExamIds.length > 0 ? (await supabaseAdmin.from('exam_sessions').select('id, exam_id, status, started_at, submitted_at, expires_at').eq('student_id', user.id).in('exam_id', allExamIds).order('created_at', { ascending: false })).data || [] : [];
       const submittedSessions = sessions.filter(s => s.status === 'submitted');
       const sessionResults = submittedSessions.length > 0 ? (await supabaseAdmin.from('exam_results').select('id, session_id, exam_id, percentage, total_score, correct_count, incorrect_count, is_passed').in('session_id', submittedSessions.map(s => s.id))).data || [] : [];
 
-      const examStatusMap: Record<string, any> = {};
       sessions.forEach(sessionItem => {
         const priority: Record<string, number> = { submitted: 3, active: 2, expired: 1, terminated: 0 };
-        const existing = examStatusMap[sessionItem.exam_id];
+        const existing = examStatusMapObj[sessionItem.exam_id];
         const currentPriority = priority[sessionItem.status] ?? 0;
         const existingPriority = existing ? (priority[existing.sessionStatus] ?? -1) : -1;
         if (currentPriority > existingPriority) {
@@ -99,7 +123,7 @@ export async function GET(request: Request) {
             ? examResults.reduce((max, r) => (Number(r.percentage) > Number(max.percentage) ? r : max), examResults[0])
             : (sessionResults.find(r => r.session_id === sessionItem.id) || null);
 
-          examStatusMap[sessionItem.exam_id] = {
+          examStatusMapObj[sessionItem.exam_id] = {
             sessionId: sessionItem.id,
             sessionStatus: sessionItem.status,
             startedAt: sessionItem.started_at,
@@ -109,126 +133,116 @@ export async function GET(request: Request) {
           };
         }
       });
-
-      const profileData = profileResult.data;
-      const requestId = request.headers.get('x-request-id') || 'unknown';
-      const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
-
-      if (!profileData) {
-        console.error(`[CRITICAL_IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: fallback student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nError: PROFILE_RESOLUTION_FAILED\nTimestamp: ${new Date().toISOString()}`);
+    } else {
+      // RPC path
+      const { profile, practiceExams = [], scheduledExams = [], recentResults = [], sessions = [], sessionResults = [] } = rpcData;
+      if (!profile || !profile.full_name) {
         return NextResponse.json(
-          { error: { code: 'PROFILE_RESOLUTION_FAILED', message: 'Failed to resolve student profile identity.' } },
+          { error: { code: 'PROFILE_RESOLUTION_FAILED', message: 'RPC payload missing student profile identity.' } },
           { status: 500, headers: { 'Cache-Control': 'no-store' } }
         );
       }
 
-      const batchesData: any = profileData?.batches;
-      const nowIso = new Date().toISOString();
+      nowIsoStr = rpcData.serverTime || new Date().toISOString();
+      profileDataObj = profile;
+      practiceExamsList = practiceExams;
+      scheduledExamsList = scheduledExams;
+      recentResultsList = recentResults;
 
-      if (ENABLE_PROFILING) {
-        console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: fallback student_profiles query\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profileData.full_name}\nTimestamp: ${new Date().toISOString()}`);
-      }
+      (sessions || []).forEach((sessionItem: any) => {
+        const priority: Record<string, number> = { submitted: 3, active: 2, expired: 1, terminated: 0 };
+        const existing = examStatusMapObj[sessionItem.exam_id];
+        const currentPriority = priority[sessionItem.status] ?? 0;
+        const existingPriority = existing ? (priority[existing.sessionStatus] ?? -1) : -1;
+        if (currentPriority > existingPriority) {
+          const examResults = (sessionResults || []).filter((r: any) => r.exam_id === sessionItem.exam_id);
+          const maxResult = examResults.length > 0
+            ? examResults.reduce((max: any, r: any) => (Number(r.percentage) > Number(max.percentage) ? r : max), examResults[0])
+            : (sessionResults.find((r: any) => r.session_id === sessionItem.id) || null);
 
-      return NextResponse.json({
-        serverTime: nowIso,
-        profile: {
-          id: profileData.id,
-          full_name: profileData.full_name,
-          roll_number: profileData.roll_number || 'Unassigned',
-          photo_url: profileData.photo_url || null,
-          batch_name: (Array.isArray(batchesData) ? batchesData[0]?.name : batchesData?.name) || null,
-        },
-        practiceExams: practiceExams.map((exam: any) => ({ ...exam, is_available: computeExamAvailability(exam, nowIso) })),
-        scheduledExams: rawScheduled.map((exam: any) => ({ ...exam, is_available: computeExamAvailability(exam, nowIso) })),
-        recentResults: recentResultsResult.data || [],
-        examStatusMap,
-      }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
-    }
-
-    // Unpack RPC payload
-    const { profile, practiceExams = [], scheduledExams = [], recentResults = [], sessions = [], sessionResults = [] } = rpcData;
-    const requestId = request.headers.get('x-request-id') || 'unknown';
-    const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
-
-    if (!profile || !profile.full_name) {
-      console.error(`[CRITICAL_IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_get_dashboard RPC\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nError: PROFILE_RESOLUTION_FAILED\nTimestamp: ${new Date().toISOString()}`);
-      return NextResponse.json(
-        { error: { code: 'PROFILE_RESOLUTION_FAILED', message: 'RPC payload missing student profile identity.' } },
-        { status: 500, headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
-
-    const nowIso = rpcData.serverTime || new Date().toISOString();
-
-    const examStatusMap: Record<string, any> = {};
-    (sessions || []).forEach((sessionItem: any) => {
-      const priority: Record<string, number> = { submitted: 3, active: 2, expired: 1, terminated: 0 };
-      const existing = examStatusMap[sessionItem.exam_id];
-      const currentPriority = priority[sessionItem.status] ?? 0;
-      const existingPriority = existing ? (priority[existing.sessionStatus] ?? -1) : -1;
-      if (currentPriority > existingPriority) {
-        const examResults = (sessionResults || []).filter((r: any) => r.exam_id === sessionItem.exam_id);
-        const maxResult = examResults.length > 0
-          ? examResults.reduce((max: any, r: any) => (Number(r.percentage) > Number(max.percentage) ? r : max), examResults[0])
-          : (sessionResults.find((r: any) => r.session_id === sessionItem.id) || null);
-
-        examStatusMap[sessionItem.exam_id] = {
-          sessionId: sessionItem.id,
-          sessionStatus: sessionItem.status,
-          startedAt: sessionItem.started_at,
-          submittedAt: sessionItem.submitted_at,
-          expiresAt: sessionItem.expires_at,
-          result: maxResult,
-        };
-      }
-    });
-
-    const enrichedScheduled = (scheduledExams || []).map((exam: any) => ({
-      ...exam,
-      is_available: computeExamAvailability(exam, nowIso),
-    }));
-
-    const enrichedPractice = (practiceExams || []).map((exam: any) => ({
-      ...exam,
-      is_available: computeExamAvailability(exam, nowIso),
-    }));
-
-    const tSerStart = performance.now();
-    const payload = {
-      serverTime: nowIso,
-      profile,
-      practiceExams: enrichedPractice,
-      scheduledExams: enrichedScheduled,
-      recentResults: recentResults || [],
-      examStatusMap,
-    };
-    const responseJson = JSON.stringify(payload);
-    const tSerEnd = performance.now();
-    const serMs = tSerEnd - tSerStart;
-    const routeTotalMs = performance.now() - tRouteStart;
-
-    if (ENABLE_PROFILING) {
-      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: dashboard\nOrigin: route_handler\nPath: /api/student/dashboard\nMethod: GET\nIs RSC: ${isRsc}\nSource: student_get_dashboard RPC\nUser ID: ${user.id}\nEmail: ${user.email || 'N/A'}\nRole: student\nFull Name: ${profile.full_name}\nTimestamp: ${new Date().toISOString()}`);
-    }
-
-    if (!ENABLE_PROFILING) {
-      return NextResponse.json(payload, {
-        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+          examStatusMapObj[sessionItem.exam_id] = {
+            sessionId: sessionItem.id,
+            sessionStatus: sessionItem.status,
+            startedAt: sessionItem.started_at,
+            submittedAt: sessionItem.submitted_at,
+            expiresAt: sessionItem.expires_at,
+            result: maxResult,
+          };
+        }
       });
     }
 
-    const reqHeaders = request.headers;
-    const mwTiming = reqHeaders.get('x-mw-timing') || '';
-    const routeTimingStr = `route_auth;dur=${authMs.toFixed(1)}, route_rpc;dur=${rpcMs.toFixed(1)}, route_ser;dur=${serMs.toFixed(1)}, route_total;dur=${routeTotalMs.toFixed(1)}`;
-    const fullServerTiming = mwTiming ? `${mwTiming}, ${routeTimingStr}, req_id;desc="${requestId}"` : `${routeTimingStr}, req_id;desc="${requestId}"`;
+    const enrichedScheduled = (scheduledExamsList || []).map((exam: any) => ({
+      ...exam,
+      is_available: computeExamAvailability(exam, nowIsoStr),
+    }));
 
-    return new NextResponse(responseJson, {
+    const enrichedPractice = (practiceExamsList || []).map((exam: any) => ({
+      ...exam,
+      is_available: computeExamAvailability(exam, nowIsoStr),
+    }));
+
+    // 3. Response Serialization
+    const tSerStart = performance.now();
+    const mwHeaderTiming = request.headers.get('x-mw-timing') || '';
+    
+    // Parse middleware timing values if available
+    let mwJwt = 0;
+    let mwUser = 0;
+    let mwSession = 0;
+    if (mwHeaderTiming) {
+      const matchAuth = mwHeaderTiming.match(/mw_auth;dur=([\d.]+)/);
+      const matchUsers = mwHeaderTiming.match(/mw_users;dur=([\d.]+)/);
+      const matchSessions = mwHeaderTiming.match(/mw_sessions;dur=([\d.]+)/);
+      if (matchAuth) mwJwt = parseFloat(matchAuth[1]);
+      if (matchUsers) mwUser = parseFloat(matchUsers[1]);
+      if (matchSessions) mwSession = parseFloat(matchSessions[1]);
+    }
+
+    const totalJwt = mwJwt + authMs;
+    const routeTotalMs = performance.now() - tRouteStart;
+
+    const payload = {
+      serverTime: nowIsoStr,
+      profile: profileDataObj,
+      practiceExams: enrichedPractice,
+      scheduledExams: enrichedScheduled,
+      recentResults: recentResultsList || [],
+      examStatusMap: examStatusMapObj,
+      timing: {
+        jwt_verification: parseFloat(totalJwt.toFixed(2)),
+        session_verification: parseFloat(mwSession.toFixed(2)),
+        user_lookup: parseFloat(mwUser.toFixed(2)),
+        dashboard_query: parseFloat(tDashboardQuery.toFixed(2)),
+        recent_exams_query: parseFloat(tRecentExamsQuery.toFixed(2)),
+        results_query: parseFloat(tResultsQuery.toFixed(2)),
+        statistics_query: parseFloat(tStatisticsQuery.toFixed(2)),
+        response_serialization: 0, // set below
+        total: parseFloat(routeTotalMs.toFixed(2)),
+      }
+    };
+
+    const responseJsonStr = JSON.stringify(payload);
+    const tSerEnd = performance.now();
+    const serMs = tSerEnd - tSerStart;
+    payload.timing.response_serialization = parseFloat(serMs.toFixed(2));
+
+    const finalJsonStr = JSON.stringify(payload);
+
+    return new NextResponse(finalJsonStr, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store, no-cache, must-revalidate',
-        'X-Request-ID': requestId,
-        'Server-Timing': fullServerTiming
+        'X-Timing-Jwt-Verification': totalJwt.toFixed(2),
+        'X-Timing-Session-Verification': mwSession.toFixed(2),
+        'X-Timing-User-Lookup': mwUser.toFixed(2),
+        'X-Timing-Dashboard-Query': tDashboardQuery.toFixed(2),
+        'X-Timing-Recent-Exams': tRecentExamsQuery.toFixed(2),
+        'X-Timing-Results-Query': tResultsQuery.toFixed(2),
+        'X-Timing-Statistics-Query': tStatisticsQuery.toFixed(2),
+        'X-Timing-Response-Serialization': serMs.toFixed(2),
+        'X-Timing-Route-Total': routeTotalMs.toFixed(2),
       }
     });
 
@@ -240,4 +254,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

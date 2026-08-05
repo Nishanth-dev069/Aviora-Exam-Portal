@@ -6,20 +6,25 @@ import { cookies } from 'next/headers';
 import { sha256Hex } from '@/lib/auth/hash';
 
 export async function POST(request: Request) {
+  const tTotalStart = performance.now();
   try {
+    // 1. Validation Stage
+    const tValidationStart = performance.now();
     const body = await request.json();
     const result = loginSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
+    const tValidation = performance.now() - tValidationStart;
+
     const { email, password } = result.data;
-    // Also extract device info from body (not validated by schema — optional extra fields)
     const device_id: string | undefined = typeof body.device_id === 'string' ? body.device_id : undefined;
     const device_info: Record<string, unknown> = (typeof body.device_info === 'object' && body.device_info !== null) ? body.device_info : {};
 
+    // 2. Supabase Auth Stage
+    const tAuthStart = performance.now();
     const cookieStore = await cookies();
 
-    // Anon client for signInWithPassword
     const supabaseAnon = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -41,6 +46,7 @@ export async function POST(request: Request) {
       email,
       password,
     });
+    const tAuth = performance.now() - tAuthStart;
 
     if (authError || !authData.session) {
       const isRateLimit = authError?.status === 429;
@@ -52,6 +58,7 @@ export async function POST(request: Request) {
         headers['X-RateLimit-Remaining'] = '0';
       }
 
+      console.log(`[LOGIN_PERF_FAILED] Auth Failed | Duration: ${(performance.now() - tTotalStart).toFixed(1)}ms | Status: ${isRateLimit ? 429 : 401}`);
       return NextResponse.json(
         { error: isRateLimit ? 'Too many login attempts. Please try again later.' : 'Invalid email or password' },
         { status: isRateLimit ? 429 : 401, headers }
@@ -73,12 +80,14 @@ export async function POST(request: Request) {
     const ipAddress = request.headers.get('x-forwarded-for') || '127.0.0.1';
     const userAgent = request.headers.get('user-agent') || '';
 
-    // Fetch user profile
+    // 3. User Lookup Stage
+    const tUserLookupStart = performance.now();
     const { data: userProfile, error: profileError } = await supabaseAdmin
       .from('users')
       .select('id, email, role, status, deleted_at, force_password_change')
       .eq('id', userId)
       .single();
+    const tUserLookup = performance.now() - tUserLookupStart;
 
     if (profileError || !userProfile) {
       console.error("Login API Error - Profile Fetch Failed:", { userId, profileError });
@@ -95,10 +104,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // ──────────────────────────────────────────────────
-    // DEVICE CHECK — students only
-    // Admin and super_admin bypass completely
-    // ──────────────────────────────────────────────────
+    // 4. Device Check Stage
+    const tDeviceCheckStart = performance.now();
     if (userProfile.role === 'student') {
       if (!device_id || device_id.length < 10) {
         await supabaseAnon.auth.signOut();
@@ -122,8 +129,6 @@ export async function POST(request: Request) {
       }
 
       if (profile.registered_device_id === null || profile.registered_device_id === undefined) {
-        // First login — register this device
-        // Normalize ::1 (IPv6 loopback on localhost) → 127.0.0.1 for readable display
         const rawIp = ipAddress.split(',')[0].trim();
         const clientIp = rawIp === '::1' ? '127.0.0.1' : rawIp;
         const deviceInfoToStore = {
@@ -147,7 +152,6 @@ export async function POST(request: Request) {
           console.error('[Login] Failed to register device:', registerError);
         }
 
-        // Audit log (fire and forget)
         void (async () => {
           try {
             await supabaseAdmin.from('audit_logs').insert({
@@ -163,10 +167,8 @@ export async function POST(request: Request) {
         })();
 
       } else if (profile.registered_device_id !== device_id) {
-        // Different device — BLOCK login immediately
         await supabaseAnon.auth.signOut();
 
-        // Audit log blocked attempt (fire and forget)
         void (async () => {
           try {
             await supabaseAdmin.from('audit_logs').insert({
@@ -189,7 +191,6 @@ export async function POST(request: Request) {
         }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
 
       } else {
-        // Same device — update last_login_at (fire and forget)
         void (async () => {
           try {
             const existingInfo = (typeof profile.registered_device_info === 'object' && profile.registered_device_info !== null)
@@ -206,9 +207,10 @@ export async function POST(request: Request) {
         })();
       }
     }
-    // For admin/super_admin: skip all device checks — fall through to normal session creation
+    const tDeviceCheck = performance.now() - tDeviceCheckStart;
 
-    // STEP 4: Terminate ALL existing active sessions for this user FIRST (before creating new one)
+    // 5. Active Session Update / Termination Stage
+    const tSessionUpdateStart = performance.now();
     const { error: terminateError } = await supabaseAdmin
       .from('active_sessions')
       .update({
@@ -217,13 +219,14 @@ export async function POST(request: Request) {
       })
       .eq('user_id', userId)
       .eq('status', 'active');
+    const tSessionUpdate = performance.now() - tSessionUpdateStart;
 
     if (terminateError) {
       console.error('[Login] Failed to terminate old sessions:', terminateError);
-      // Non-fatal — continue
     }
 
-    // STEP 5: Write audit log for terminated sessions (fire and forget)
+    // 6. Audit Log Dispatch Stage
+    const tAuditLogStart = performance.now();
     void (async () => {
       try {
         await supabaseAdmin.from('audit_logs').insert({
@@ -239,13 +242,13 @@ export async function POST(request: Request) {
         console.error('[Login Audit Error - Terminate]', err);
       }
     })();
+    const tAuditLog = performance.now() - tAuditLogStart;
 
-    // STEP 6: Create new active_sessions row — expires in 24 hours (extended by heartbeat)
-    // Uses a stable device session UUID independent of the Supabase JWT lifecycle.
-    // JWT rotates every ~1 hour but this UUID never changes until next login.
+    // 7. Session Creation Stage
+    const tSessionCreationStart = performance.now();
     const deviceSessionUUID = crypto.randomUUID();
     const tokenHash = await sha256Hex(deviceSessionUUID);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     const { data: newSession, error: sessionError } = await supabaseAdmin
       .from('active_sessions')
@@ -263,6 +266,7 @@ export async function POST(request: Request) {
       })
       .select('id')
       .single();
+    const tSessionCreation = performance.now() - tSessionCreationStart;
 
     if (sessionError || !newSession) {
       console.error('[Login] Failed to create active session:', sessionError);
@@ -272,7 +276,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // STEP 7: Write login audit log (fire and forget)
     void (async () => {
       try {
         await supabaseAdmin.from('audit_logs').insert({
@@ -289,7 +292,11 @@ export async function POST(request: Request) {
       }
     })();
 
-    // STEP 8: Return success & synchronize cookies
+    // 8. Cookie Creation & Response Assembly Stage
+    const tCookieStart = performance.now();
+    const tCookie = performance.now() - tCookieStart;
+    const tTotal = performance.now() - tTotalStart;
+
     const response = NextResponse.json(
       {
         success: true,
@@ -304,33 +311,45 @@ export async function POST(request: Request) {
           refresh_token: authData.session.refresh_token,
           expires_at: authData.session.expires_at,
         },
+        timing: {
+          validation: parseFloat(tValidation.toFixed(2)),
+          supabase_auth: parseFloat(tAuth.toFixed(2)),
+          user_lookup: parseFloat(tUserLookup.toFixed(2)),
+          device_check: parseFloat(tDeviceCheck.toFixed(2)),
+          session_update: parseFloat(tSessionUpdate.toFixed(2)),
+          session_insert: parseFloat(tSessionCreation.toFixed(2)),
+          audit_log: parseFloat(tAuditLog.toFixed(2)),
+          cookie_creation: parseFloat(tCookie.toFixed(2)),
+          total: parseFloat(tTotal.toFixed(2)),
+        }
       },
       {
         status: 200,
-        headers: { 'Cache-Control': 'no-store' },
+        headers: {
+          'Cache-Control': 'no-store',
+          'X-Timing-Validation': tValidation.toFixed(2),
+          'X-Timing-Supabase-Auth': tAuth.toFixed(2),
+          'X-Timing-User-Lookup': tUserLookup.toFixed(2),
+          'X-Timing-Device-Check': tDeviceCheck.toFixed(2),
+          'X-Timing-Session-Update': tSessionUpdate.toFixed(2),
+          'X-Timing-Session-Insert': tSessionCreation.toFixed(2),
+          'X-Timing-Audit-Log': tAuditLog.toFixed(2),
+          'X-Timing-Total': tTotal.toFixed(2),
+        },
       }
     );
 
-    // Sync cookies from store and set device session cookie (httpOnly — JS cannot read it)
     cookieStore.getAll().forEach((c) => {
       response.cookies.set(c.name, c.value);
     });
 
-    // aviora-device-session: the stable session identifier stored as hash in active_sessions.
-    // Rotation-proof: remains valid across all Supabase JWT rotations until next login.
     response.cookies.set('aviora-device-session', deviceSessionUUID, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 7, // 7 days cookie lifetime — server row expires at 24h
+      maxAge: 60 * 60 * 24 * 7,
       path: '/',
     });
-
-    if (process.env.ENABLE_PROFILING === 'true') {
-      const requestId = request.headers.get('x-request-id') || 'unknown';
-      const isRsc = request.headers.get('rsc') === '1' || (request.headers.get('accept') || '').includes('text/x-component');
-      console.log(`[IDENTITY_TRACE]\nRequest ID: ${requestId}\nLayer: auth_login\nOrigin: route_handler\nPath: /api/auth/login\nMethod: POST\nIs RSC: ${isRsc}\nSource: signInWithPassword & users table\nUser ID: ${userProfile.id}\nEmail: ${userProfile.email}\nRole: ${userProfile.role}\nTimestamp: ${new Date().toISOString()}`);
-    }
 
     return response;
   } catch (err) {
