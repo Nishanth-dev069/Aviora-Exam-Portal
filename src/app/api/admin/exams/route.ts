@@ -258,8 +258,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step 6: Audit Log
-    await supabaseAdmin.from('audit_logs').insert({
+    // Step 6: Audit Log (fire-and-forget)
+    void supabaseAdmin.from('audit_logs').insert({
       actor_id: adminUser.id,
       actor_role: 'admin',
       action: 'admin.exam_published',
@@ -267,6 +267,8 @@ export async function POST(request: NextRequest) {
       resource_id: exam.id,
       metadata: { title: exam.title, type: exam.type, enrolled_count: finalStudentIds.size },
       ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+    }).then(({ error }) => {
+      if (error) console.error('[audit_log_error]', error.message);
     });
 
     return NextResponse.json({ 

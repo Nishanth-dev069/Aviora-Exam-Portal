@@ -53,7 +53,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <OfflineBanner />
       <HeartbeatProvider />
       <AdminIdleGuard />
-      <AdminSidebar adminName={adminName} />
+      <AdminSidebar adminName={adminName} userRole={userData.role} />
       <main className="flex-1 overflow-y-auto relative">
         {children}
       </main>

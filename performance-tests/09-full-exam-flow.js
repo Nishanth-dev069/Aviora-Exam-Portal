@@ -2,7 +2,7 @@
 import { SharedArray } from 'k6/data';
 import exec from 'k6/execution';
 import { config } from './config.js';
-import { getVUToken, loadDashboard, startExam, syncAnswers, submitExam, sleepRandom, generateHTMLReport } from './helpers.js';
+import { getVUToken, loadDashboard, startExam, syncAnswers, submitExam, sleepRandom, generateHTMLReport, generateUUID } from './helpers.js';
 
 const students = new SharedArray('students', function () {
   return JSON.parse(open('./students.json'));
@@ -57,7 +57,7 @@ export default function () {
     sleepRandom(3, 7);
 
     // Autosave sync
-    syncAnswers(session, sessionId, `sync_vu${exec.vu.idInTest}_${Date.now()}`, mockAnswers);
+    syncAnswers(session, sessionId, generateUUID(), mockAnswers);
   }
 
   // Realistic Think Time: Student reviews answers before submission

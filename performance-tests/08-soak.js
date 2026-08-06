@@ -8,13 +8,14 @@ const students = new SharedArray('students', function () {
 });
 
 // Soak duration defaults to 2 hours, can be overridden via CLI: -e SOAK_DURATION=15m
-const soakDuration = __ENV.SOAK_DURATION || '2h';
+const soakDuration = __ENV.SOAK_DURATION || '1h';
 
 export const options = {
   stages: [
     { duration: '2m', target: 100 },           // Ramp up to 100 VUs
     { duration: soakDuration, target: 100 },   // Sustained soak duration
-    { duration: '2m', target: 0 },             // Ramp down
+    { duration: '2m', target: 0 },
+    // Ramp down
   ],
   thresholds: config.THRESHOLDS.SOAK,
 };

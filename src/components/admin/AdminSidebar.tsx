@@ -3,15 +3,16 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, Folder, HelpCircle, FileText, Activity, BarChart2, LogOut, ArrowUpRight } from 'lucide-react';
+import { Users, Folder, HelpCircle, FileText, Activity, BarChart2, LogOut, ArrowUpRight, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createBrowserClient } from '@supabase/ssr';
 
 interface Props {
   adminName: string;
+  userRole?: string;
 }
 
-export default function AdminSidebar({ adminName }: Props) {
+export default function AdminSidebar({ adminName, userRole }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   
@@ -28,6 +29,13 @@ export default function AdminSidebar({ adminName }: Props) {
     { name: 'Monitor', href: '/admin/monitoring', icon: Activity },
     { name: 'Reports', href: '/admin/reports', icon: BarChart2 },
   ];
+
+  if (userRole === 'super_admin') {
+    navItems.push(
+      { name: 'Admins', href: '/admin/admins', icon: ShieldCheck },
+      { name: 'Audit Logs', href: '/admin/audit-logs', icon: ShieldAlert }
+    );
+  }
 
   const handleLogout = async () => {
     try {

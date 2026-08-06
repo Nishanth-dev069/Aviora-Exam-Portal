@@ -80,8 +80,8 @@ export async function POST(
       console.warn('[Admin Terminate submit_exam_session RPC warning]', submitErr);
     }
 
-    // Write audit log
-    await supabaseAdmin.from('audit_logs').insert({
+    // Write audit log (fire-and-forget)
+    void supabaseAdmin.from('audit_logs').insert({
       actor_id: user.id,
       actor_role: adminUser.role,
       action: 'exam.session_terminated_by_admin',
@@ -89,6 +89,8 @@ export async function POST(
       resource_id: sessionId,
       metadata: { examId: examId, studentId: session.student_id },
       ip_address: req.headers.get('x-forwarded-for') || '127.0.0.1'
+    }).then(({ error }) => {
+      if (error) console.error('[audit_log_error]', error.message);
     });
 
     return NextResponse.json({ success: true, result: resultData });

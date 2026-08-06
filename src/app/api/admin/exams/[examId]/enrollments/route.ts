@@ -126,8 +126,8 @@ export async function POST(
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: insertError.message } }, { status: 500 });
   }
 
-  // Write audit log
-  await supabaseAdmin.from('audit_logs').insert({
+  // Write audit log (fire-and-forget)
+  void supabaseAdmin.from('audit_logs').insert({
     actor_id: user.id,
     actor_role: adminRole,
     action: 'admin.exam_enrollments_updated',
@@ -139,6 +139,8 @@ export async function POST(
       new_enrollment_count: inserted?.length ?? 0,
     },
     ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+  }).then(({ error }) => {
+    if (error) console.error('[audit_log_error]', error.message);
   });
 
   return NextResponse.json({

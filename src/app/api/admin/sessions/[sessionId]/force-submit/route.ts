@@ -78,8 +78,8 @@ export async function POST(
       console.warn('[Admin Force Submit RPC warning]', submitErr);
     }
 
-    // Write audit log
-    await supabaseAdmin.from('audit_logs').insert({
+    // Write audit log (fire-and-forget)
+    void supabaseAdmin.from('audit_logs').insert({
       actor_id: user.id,
       actor_role: adminUser.role,
       action: 'admin.session_force_submitted',
@@ -87,6 +87,8 @@ export async function POST(
       resource_id: sessionId,
       metadata: { reason: 'admin_force_submit' },
       ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+    }).then(({ error }) => {
+      if (error) console.error('[audit_log_error]', error.message);
     });
 
     return NextResponse.json({ success: true, result: resultData });

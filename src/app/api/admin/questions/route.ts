@@ -264,17 +264,17 @@ export async function POST(request: Request) {
         } catch (_) { /* ignore FK-constraint issues on delete */ }
       }
 
-      // Audit Log
-      try {
-        await supabaseAdmin.from('audit_logs').insert({
-          actor_id: adminUser.id,
-          actor_role: 'admin',
-          action: 'admin.question_edited',
-          resource_type: 'question',
-          resource_id: id,
-          ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
-        });
-      } catch (auditErr) { console.error('[Audit Log Error]', auditErr); }
+      // Audit Log (fire-and-forget)
+      void supabaseAdmin.from('audit_logs').insert({
+        actor_id: adminUser.id,
+        actor_role: 'admin',
+        action: 'admin.question_edited',
+        resource_type: 'question',
+        resource_id: id,
+        ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+      }).then(({ error }) => {
+        if (error) console.error('[audit_log_error]', error.message);
+      });
 
       return NextResponse.json({ success: true, message: 'Question updated successfully', id });
     } else {
@@ -314,17 +314,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to save options: ' + optErr.message } }, { status: 500 });
       }
 
-      // Audit Log
-      try {
-        await supabaseAdmin.from('audit_logs').insert({
-          actor_id: adminUser.id,
-          actor_role: 'admin',
-          action: 'admin.question_created',
-          resource_type: 'question',
-          resource_id: newQ.id,
-          ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
-        });
-      } catch (auditErr) { console.error('[Audit Log Error]', auditErr); }
+      // Audit Log (fire-and-forget)
+      void supabaseAdmin.from('audit_logs').insert({
+        actor_id: adminUser.id,
+        actor_role: 'admin',
+        action: 'admin.question_created',
+        resource_type: 'question',
+        resource_id: newQ.id,
+        ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+      }).then(({ error }) => {
+        if (error) console.error('[audit_log_error]', error.message);
+      });
 
       return NextResponse.json({ success: true, message: 'Question created successfully', id: newQ.id }, { status: 201 });
     }

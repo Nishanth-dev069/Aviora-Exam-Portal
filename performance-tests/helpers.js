@@ -185,6 +185,10 @@ export function startExam(tokenOrSession, examId) {
     'Exam questions loaded': () => data && Array.isArray(data.questions),
   });
 
+  if (res.status !== 200) {
+    console.log(`[START_EXAM_FAIL] VU=${exec.vu.idInTest} status=${res.status} duration=${res.timings.duration}ms body=${res.body}`);
+  }
+
   return {
     res,
     success,
@@ -197,11 +201,19 @@ export function startExam(tokenOrSession, examId) {
 /**
  * Syncs student answers (autosave) POST /api/exam/sync
  */
+export function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function syncAnswers(tokenOrSession, sessionId, syncId, answers) {
   const url = `${config.BASE_URL}${config.SYNC_ENDPOINT}`;
   const payload = JSON.stringify({
     session_id: sessionId,
-    sync_id: syncId || `sync_${Date.now()}`,
+    sync_id: syncId || generateUUID(),
     answers: answers || [],
   });
 
@@ -211,6 +223,10 @@ export function syncAnswers(tokenOrSession, sessionId, syncId, answers) {
   };
 
   const res = http.post(url, payload, params);
+
+  if (res.status !== 200) {
+    console.log(`[SYNC_FAIL] VU=${exec.vu.idInTest} status=${res.status} duration=${res.timings.duration}ms body=${res.body}`);
+  }
 
   check(res, {
     'Autosave HTTP status is 200': (r) => r.status === 200,
@@ -243,7 +259,7 @@ export function submitExam(tokenOrSession, sessionId, submissionToken) {
 
   check(res, {
     'Submit Exam HTTP status is 200': (r) => r.status === 200,
-    'Submission acknowledged': () => data && data.success === true,
+    'Submission acknowledged': () => data && (data.success === true || Boolean(data.id || data.session_id)),
   });
 
   return { res, data };

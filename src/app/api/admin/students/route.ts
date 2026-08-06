@@ -383,8 +383,8 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 
-  // Write audit log
-  await supabaseAdmin.from('audit_logs').insert({
+  // Write audit log (fire-and-forget)
+  void supabaseAdmin.from('audit_logs').insert({
     actor_id: adminUser.id,
     actor_role: 'admin',
     action: 'admin.student_created',
@@ -392,6 +392,8 @@ export async function POST(request: NextRequest) {
     resource_id: newUserId,
     metadata: { email, roll_number },
     ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+  }).then(({ error }) => {
+    if (error) console.error('[audit_log_error]', error.message);
   });
 
   return NextResponse.json({ success: true, student_id: newUserId, studentId: newUserId }, { status: 201 });
@@ -426,7 +428,7 @@ export async function PATCH(request: NextRequest) {
     const { error } = await supabaseAdmin.from('users').update({ status }).eq('id', student_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     
-    await supabaseAdmin.from('audit_logs').insert({
+    void supabaseAdmin.from('audit_logs').insert({
       actor_id: adminUser.id,
       actor_role: 'admin',
       action: 'admin.student_status_changed',
@@ -434,6 +436,8 @@ export async function PATCH(request: NextRequest) {
       resource_id: student_id,
       metadata: { new_status: status },
       ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+    }).then(({ error }) => {
+      if (error) console.error('[audit_log_error]', error.message);
     });
     
     return NextResponse.json({ message: 'Status updated' });
@@ -447,13 +451,15 @@ export async function PATCH(request: NextRequest) {
     const { error: usrErr } = await supabaseAdmin.from('users').update({ force_password_change: true }).eq('id', student_id);
     if (usrErr) return NextResponse.json({ error: usrErr.message }, { status: 500 });
     
-    await supabaseAdmin.from('audit_logs').insert({
+    void supabaseAdmin.from('audit_logs').insert({
       actor_id: adminUser.id,
       actor_role: 'admin',
       action: 'admin.password_reset',
       resource_type: 'user',
       resource_id: student_id,
       ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+    }).then(({ error }) => {
+      if (error) console.error('[audit_log_error]', error.message);
     });
     
     return NextResponse.json({ message: 'Password reset' });
@@ -490,13 +496,15 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  await supabaseAdmin.from('audit_logs').insert({
+  void supabaseAdmin.from('audit_logs').insert({
     actor_id: adminUser.id,
     actor_role: 'admin',
     action: 'admin.student_deleted',
     resource_type: 'user',
     resource_id: student_id,
     ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+  }).then(({ error }) => {
+    if (error) console.error('[audit_log_error]', error.message);
   });
 
   return NextResponse.json({ success: true, message: 'Student deleted successfully' });

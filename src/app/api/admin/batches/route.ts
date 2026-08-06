@@ -150,14 +150,16 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Audit Log
-  await supabaseAdmin.from('audit_logs').insert({
+  // Audit Log (fire-and-forget)
+  void supabaseAdmin.from('audit_logs').insert({
     actor_id: adminUser.id,
     actor_role: 'admin',
     action: 'admin.batch_archived',
     resource_type: 'batch',
     resource_id: id,
     ip_address: request.headers.get('x-forwarded-for') || '127.0.0.1'
+  }).then(({ error }) => {
+    if (error) console.error('[audit_log_error]', error.message);
   });
 
   return NextResponse.json({ message: 'Batch archived successfully' });

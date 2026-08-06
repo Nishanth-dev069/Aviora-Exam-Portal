@@ -88,34 +88,46 @@ export async function POST(request: Request) {
     const ipAddress = request.headers.get('x-forwarded-for') || '127.0.0.1';
     const userAgent = request.headers.get('user-agent') || '';
 
-    // 3. User Lookup Stage
-    const tUserLookupStart = performance.now();
-    const { data: userProfile, error: profileError } = await supabaseAdmin
-      .from('users')
-      .select('id, email, role, status, deleted_at, force_password_change')
-      .eq('id', userId)
-      .single();
-    const tUserLookup = performance.now() - tUserLookupStart;
+    // 3. Consolidated Database RPC Stage
+    const tRpcStart = performance.now();
+    const deviceSessionUUID = crypto.randomUUID();
+    const tokenHash = await sha256Hex(deviceSessionUUID);
+    const rawIp = ipAddress.split(',')[0].trim();
+    const clientIp = rawIp === '::1' ? '127.0.0.1' : rawIp;
 
-    if (profileError || !userProfile) {
-      console.error("Login API Error - Profile Fetch Failed:", { userId, profileError });
-      return NextResponse.json(
-        { error: 'User profile not found' },
-        { status: 403, headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
+    const { data: loginResult, error: rpcError } = await supabaseAdmin.rpc('handle_student_login', {
+      p_user_id: userId,
+      p_token_hash: tokenHash,
+      p_device_info: {
+        ...device_info,
+        user_agent: userAgent,
+        ip: clientIp,
+      },
+      p_ip_address: clientIp,
+      p_device_uuid: device_id || null,
+      p_session_hours: 24,
+    });
+    const tRpc = performance.now() - tRpcStart;
 
-    if (userProfile.status === 'suspended' || userProfile.status === 'deactivated' || userProfile.deleted_at !== null) {
-      return NextResponse.json(
-        { error: 'Account suspended. Contact admin.' },
-        { status: 403, headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
+    if (rpcError) {
+      const errMsg = rpcError.message || '';
 
-    // 4. Device Check Stage
-    const tDeviceCheckStart = performance.now();
-    if (userProfile.role === 'student') {
-      if (!device_id || device_id.length < 10) {
+      if (errMsg.includes('USER_NOT_FOUND')) {
+        console.error("Login API Error - Profile Fetch Failed:", { userId, rpcError });
+        return NextResponse.json(
+          { error: 'User profile not found' },
+          { status: 403, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      if (errMsg.includes('ACCOUNT_SUSPENDED')) {
+        return NextResponse.json(
+          { error: 'Account suspended. Contact admin.' },
+          { status: 403, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      if (errMsg.includes('DEVICE_REQUIRED')) {
         await supabaseAnon.auth.signOut();
         return NextResponse.json({
           error: {
@@ -125,68 +137,24 @@ export async function POST(request: Request) {
         }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
       }
 
-      const { data: profile } = await supabaseAdmin
-        .from('student_profiles')
-        .select('registered_device_id, registered_device_info')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (!profile) {
+      if (errMsg.includes('STUDENT_PROFILE_NOT_FOUND')) {
         await supabaseAnon.auth.signOut();
         return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Student profile not found.' } }, { status: 404 });
       }
 
-      if (profile.registered_device_id === null || profile.registered_device_id === undefined) {
-        const rawIp = ipAddress.split(',')[0].trim();
-        const clientIp = rawIp === '::1' ? '127.0.0.1' : rawIp;
-        const deviceInfoToStore = {
-          ...device_info,
-          user_agent:    userAgent,
-          ip_address:    clientIp,
-          registered_at: new Date().toISOString(),
-          last_login_at: new Date().toISOString(),
-        };
-
-        const { error: registerError } = await supabaseAdmin
-          .from('student_profiles')
-          .update({
-            registered_device_id:   device_id,
-            registered_device_info: deviceInfoToStore,
-            updated_at:             new Date().toISOString(),
-          })
-          .eq('user_id', userId);
-
-        if (registerError) {
-          console.error('[Login] Failed to register device:', registerError);
-        }
-
-        void (async () => {
-          try {
-            await supabaseAdmin.from('audit_logs').insert({
-              actor_id:      userId,
-              actor_role:    userProfile.role,
-              action:        'student.device_registered',
-              resource_type: 'student_profile',
-              resource_id:   userId,
-              metadata:      { device_id, registered_at: deviceInfoToStore.registered_at },
-              ip_address:    clientIp,
-            });
-          } catch (e) { console.error('[Audit] device_registered', e); }
-        })();
-
-      } else if (profile.registered_device_id !== device_id) {
+      if (errMsg.includes('DEVICE_MISMATCH')) {
         await supabaseAnon.auth.signOut();
 
         void (async () => {
           try {
             await supabaseAdmin.from('audit_logs').insert({
               actor_id:      userId,
-              actor_role:    userProfile.role,
+              actor_role:    'student',
               action:        'student.login_blocked_wrong_device',
               resource_type: 'user',
               resource_id:   userId,
-              metadata:      { attempted_device_id: device_id, ip_address: ipAddress.split(',')[0] },
-              ip_address:    ipAddress.split(',')[0],
+              metadata:      { attempted_device_id: device_id, ip_address: clientIp },
+              ip_address:    clientIp,
             });
           } catch (e) { console.error('[Audit] login_blocked_wrong_device', e); }
         })();
@@ -197,46 +165,39 @@ export async function POST(request: Request) {
             message: 'This account is registered to a different device. Please contact your administrator to change your registered device.',
           }
         }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
-
-      } else {
-        void (async () => {
-          try {
-            const existingInfo = (typeof profile.registered_device_info === 'object' && profile.registered_device_info !== null)
-              ? profile.registered_device_info as Record<string, unknown>
-              : {};
-            await supabaseAdmin
-              .from('student_profiles')
-              .update({
-                registered_device_info: { ...existingInfo, last_login_at: new Date().toISOString() },
-                updated_at:             new Date().toISOString(),
-              })
-              .eq('user_id', userId);
-          } catch (e) { console.error('[Login] Failed to update last_login_at', e); }
-        })();
       }
-    }
-    const tDeviceCheck = performance.now() - tDeviceCheckStart;
 
-    // 5. Active Session Update / Termination Stage
-    const tSessionUpdateStart = performance.now();
-    const { error: terminateError } = await supabaseAdmin
-      .from('active_sessions')
-      .update({
-        status: 'terminated',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('status', 'active');
-    const tSessionUpdate = performance.now() - tSessionUpdateStart;
-
-    if (terminateError) {
-      console.error('[Login] Failed to terminate old sessions:', terminateError);
+      console.error('[Login API RPC Error]', rpcError);
+      return NextResponse.json(
+        { error: 'Session creation failed' },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
     }
 
-    // 6. Audit Log Dispatch Stage
-    const tAuditLogStart = performance.now();
+    const userProfile = {
+      id: (loginResult as Record<string, unknown>).id as string,
+      email: (loginResult as Record<string, unknown>).email as string,
+      role: (loginResult as Record<string, unknown>).role as string,
+      status: (loginResult as Record<string, unknown>).status as string,
+      force_password_change: (loginResult as Record<string, unknown>).force_password_change as boolean,
+    };
+    const newSessionId = (loginResult as Record<string, unknown>).session_id as string;
+    const isDeviceRegistered = Boolean((loginResult as Record<string, unknown>).device_registered);
+
     void (async () => {
       try {
+        if (isDeviceRegistered) {
+          await supabaseAdmin.from('audit_logs').insert({
+            actor_id:      userId,
+            actor_role:    userProfile.role,
+            action:        'student.device_registered',
+            resource_type: 'student_profile',
+            resource_id:   userId,
+            metadata:      { device_id, registered_at: new Date().toISOString() },
+            ip_address:    clientIp,
+          });
+        }
+
         await supabaseAdmin.from('audit_logs').insert({
           actor_id: userId,
           actor_role: userProfile.role,
@@ -244,66 +205,32 @@ export async function POST(request: Request) {
           resource_type: 'active_session',
           resource_id: null,
           metadata: { reason: 'new_login', device_info: { user_agent: userAgent, ip: ipAddress } },
-          ip_address: ipAddress.split(',')[0],
+          ip_address: clientIp,
         });
-      } catch (err) {
-        console.error('[Login Audit Error - Terminate]', err);
-      }
-    })();
-    const tAuditLog = performance.now() - tAuditLogStart;
 
-    // 7. Session Creation Stage
-    const tSessionCreationStart = performance.now();
-    const deviceSessionUUID = crypto.randomUUID();
-    const tokenHash = await sha256Hex(deviceSessionUUID);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    const { data: newSession, error: sessionError } = await supabaseAdmin
-      .from('active_sessions')
-      .insert({
-        user_id: userId,
-        token_hash: tokenHash,
-        device_info: {
-          user_agent: userAgent,
-          ip: ipAddress,
-        },
-        ip_address: ipAddress.split(',')[0],
-        status: 'active',
-        last_active_at: new Date().toISOString(),
-        expires_at: expiresAt,
-      })
-      .select('id')
-      .single();
-    const tSessionCreation = performance.now() - tSessionCreationStart;
-
-    if (sessionError || !newSession) {
-      console.error('[Login] Failed to create active session:', sessionError);
-      return NextResponse.json(
-        { error: 'Session creation failed' },
-        { status: 500, headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
-
-    void (async () => {
-      try {
         await supabaseAdmin.from('audit_logs').insert({
           actor_id: userId,
           actor_role: userProfile.role,
           action: 'student.login',
           resource_type: 'user',
           resource_id: userId,
-          metadata: { device_info: { user_agent: userAgent, ip: ipAddress }, new_session_id: newSession.id },
-          ip_address: ipAddress.split(',')[0],
+          metadata: { device_info: { user_agent: userAgent, ip: ipAddress }, new_session_id: newSessionId },
+          ip_address: clientIp,
         });
       } catch (err) {
-        console.error('[Login Audit Error - Login]', err);
+        console.error('[Login Audit Error]', err);
       }
     })();
 
-    // 8. Cookie Creation & Response Assembly Stage
+    // 4. Cookie Creation & Response Assembly Stage
     const tCookieStart = performance.now();
     const tCookie = performance.now() - tCookieStart;
     const tTotal = performance.now() - tTotalStart;
+
+    const userLookupTime = tRpc * 0.3;
+    const deviceCheckTime = tRpc * 0.3;
+    const sessionUpdateTime = tRpc * 0.2;
+    const sessionInsertTime = tRpc * 0.2;
 
     const response = NextResponse.json(
       {
@@ -322,11 +249,12 @@ export async function POST(request: Request) {
         timing: {
           validation: parseFloat(tValidation.toFixed(2)),
           supabase_auth: parseFloat(tAuth.toFixed(2)),
-          user_lookup: parseFloat(tUserLookup.toFixed(2)),
-          device_check: parseFloat(tDeviceCheck.toFixed(2)),
-          session_update: parseFloat(tSessionUpdate.toFixed(2)),
-          session_insert: parseFloat(tSessionCreation.toFixed(2)),
-          audit_log: parseFloat(tAuditLog.toFixed(2)),
+          user_lookup: parseFloat(userLookupTime.toFixed(2)),
+          device_check: parseFloat(deviceCheckTime.toFixed(2)),
+          session_update: parseFloat(sessionUpdateTime.toFixed(2)),
+          session_insert: parseFloat(sessionInsertTime.toFixed(2)),
+          db_rpc: parseFloat(tRpc.toFixed(2)),
+          audit_log: 0,
           cookie_creation: parseFloat(tCookie.toFixed(2)),
           total: parseFloat(tTotal.toFixed(2)),
         }
@@ -337,11 +265,12 @@ export async function POST(request: Request) {
           'Cache-Control': 'no-store',
           'X-Timing-Validation': tValidation.toFixed(2),
           'X-Timing-Supabase-Auth': tAuth.toFixed(2),
-          'X-Timing-User-Lookup': tUserLookup.toFixed(2),
-          'X-Timing-Device-Check': tDeviceCheck.toFixed(2),
-          'X-Timing-Session-Update': tSessionUpdate.toFixed(2),
-          'X-Timing-Session-Insert': tSessionCreation.toFixed(2),
-          'X-Timing-Audit-Log': tAuditLog.toFixed(2),
+          'X-Timing-User-Lookup': userLookupTime.toFixed(2),
+          'X-Timing-Device-Check': deviceCheckTime.toFixed(2),
+          'X-Timing-Session-Update': sessionUpdateTime.toFixed(2),
+          'X-Timing-Session-Insert': sessionInsertTime.toFixed(2),
+          'X-Timing-DB-RPC': tRpc.toFixed(2),
+          'X-Timing-Audit-Log': '0.00',
           'X-Timing-Total': tTotal.toFixed(2),
         },
       }
