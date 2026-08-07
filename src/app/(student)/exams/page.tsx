@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Calendar, BookOpen, Layers, Compass, Cloud, FileText, Cpu, CheckCircle } from 'lucide-react';
 import { ScheduledExamCard, PracticeExamCard } from '@/components/student/ExamCards';
+import { CardSkeleton } from '@/components/ui/Skeleton';
 
 interface ExamsData {
   practiceExams: any[];
@@ -63,23 +64,7 @@ export default function StudentExamsPage() {
     return grouped;
   }, [data?.practiceExams]);
 
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-8 max-w-7xl mx-auto p-4 md:p-8">
-        <div className="h-10 bg-surface rounded-lg w-64"></div>
-        <div className="space-y-4">
-          <div className="h-28 bg-surface rounded-xl"></div>
-          <div className="h-28 bg-surface rounded-xl"></div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="h-36 bg-surface rounded-xl"></div>
-          <div className="h-36 bg-surface rounded-xl"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (error && !data) {
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <div className="p-6 bg-danger/10 border border-danger/20 text-danger rounded-xl flex items-center gap-3 font-bold">
@@ -90,7 +75,7 @@ export default function StudentExamsPage() {
     );
   }
 
-  const { practiceExams, scheduledExams, examStatusMap } = data;
+  const { practiceExams = [], scheduledExams = [], examStatusMap = {} } = data || {};
 
   const displaySubjects = selectedSubject === 'ALL'
     ? Object.keys(practiceExamsBySubject)
@@ -110,9 +95,11 @@ export default function StudentExamsPage() {
           <h2 className="text-xs font-bold tracking-widest text-text-muted uppercase flex items-center gap-2">
             <Calendar className="w-4 h-4 text-primary" />
             Scheduled Exams
-            <span className="text-[11px] font-semibold text-text-muted normal-case">
-              ({scheduledExams.length} enrolled)
-            </span>
+            {scheduledExams.length > 0 && (
+              <span className="text-[11px] font-semibold text-text-muted normal-case">
+                ({scheduledExams.length} enrolled)
+              </span>
+            )}
           </h2>
           {scheduledExams.length > 0 && (
             <Link href="/exams/scheduled" className="text-xs font-bold text-primary hover:underline">
@@ -121,7 +108,12 @@ export default function StudentExamsPage() {
           )}
         </div>
 
-        {scheduledExams.length === 0 ? (
+        {loading && !data ? (
+          <div className="space-y-4">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : scheduledExams.length === 0 ? (
           <div className="bg-surface rounded-xl p-8 text-center text-text-muted border border-border border-dashed">
             You are not enrolled in any upcoming scheduled exams.
           </div>
@@ -190,7 +182,14 @@ export default function StudentExamsPage() {
           </div>
         )}
 
-        {practiceExams.length === 0 ? (
+        {loading && !data ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : practiceExams.length === 0 ? (
           <div className="bg-surface rounded-xl p-8 text-center text-text-muted border border-border border-dashed">
             No practice exams available yet. Check back soon.
           </div>

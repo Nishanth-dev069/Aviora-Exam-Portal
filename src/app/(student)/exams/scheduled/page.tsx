@@ -35,21 +35,7 @@ export default function ScheduledExamsPage() {
     fetchExams();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6 animate-pulse">
-        <Skeleton className="h-4 w-32 rounded" />
-        <Skeleton className="h-9 w-64 rounded-lg" />
-        <div className="space-y-4">
-          <CardSkeleton />
-          <CardSkeleton />
-          <CardSkeleton />
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (error && !data) {
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <div className="p-6 bg-danger/10 border border-danger/20 text-danger rounded-xl flex items-center gap-3 font-bold">
@@ -60,7 +46,7 @@ export default function ScheduledExamsPage() {
     );
   }
 
-  const { scheduledExams, examStatusMap } = data;
+  const { scheduledExams = [], examStatusMap = {} } = data || {};
 
   const filteredExams = scheduledExams.filter((exam) => {
     const q = searchQuery.toLowerCase().trim();
@@ -101,7 +87,13 @@ export default function ScheduledExamsPage() {
       </div>
 
       <section className="space-y-4">
-        {filteredExams.length === 0 ? (
+        {loading && !data ? (
+          <div className="space-y-4">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : filteredExams.length === 0 ? (
           <div className="bg-surface rounded-xl p-12 text-center text-text-muted border border-border border-dashed">
             <p className="font-medium">
               {searchQuery ? 'No scheduled exams match your search.' : 'You have no scheduled exams at this time.'}

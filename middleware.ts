@@ -194,8 +194,9 @@ export async function middleware(req: NextRequest) {
       redirectRes.cookies.delete('aviora-device-session');
       return redirectRes;
     }
+  }
 
-  const requestId = req.headers.get('x-request-id') || req.headers.get('x-vercel-id') || crypto.randomUUID();
+  requestId = req.headers.get('x-request-id') || req.headers.get('x-vercel-id') || crypto.randomUUID();
   req.headers.set('x-request-id', requestId);
   req.headers.set('x-identity-user-id', user.id);
 

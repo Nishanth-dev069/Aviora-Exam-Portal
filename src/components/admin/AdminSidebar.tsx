@@ -50,13 +50,10 @@ export default function AdminSidebar({ adminName, userRole }: Props) {
   return (
     <aside className="w-16 md:w-60 h-full bg-surface border-r border-border flex flex-col transition-all duration-300 z-30 flex-shrink-0">
       
-      {/* Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-border">
+      {/* Header (Logo Cell Only) */}
+      <div className="h-16 flex items-center justify-between px-4 bg-[#0F4383] border-b border-blue-900/60 shrink-0">
         <div className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap">
-          <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-8 w-auto object-contain shrink-0" />
-          <span className="font-black text-text-primary text-base hidden md:inline">
-            AVIORA <span className="text-text-muted font-normal text-xs ml-0.5">Admin</span>
-          </span>
+          <img src="/aviora-logo-full.png" alt="AVIORA Logo" className="h-10 w-auto object-contain shrink-0 drop-shadow-xs" />
         </div>
       </div>
 

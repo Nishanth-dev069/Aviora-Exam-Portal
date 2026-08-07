@@ -39,17 +39,7 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 animate-pulse">
-        <Skeleton className="h-8 w-48 rounded-lg" />
-        <Skeleton className="h-4 w-32 rounded-md" />
-        <TableSkeleton rows={6} cols={5} />
-      </div>
-    );
-  }
-
-  if (data?.notInBatch) {
+  if (!loading && data?.notInBatch) {
     return (
       <div className="max-w-3xl mx-auto p-8 my-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
         <Users className="mx-auto h-12 w-12 text-text-muted" />
@@ -61,19 +51,8 @@ export default function LeaderboardPage() {
     );
   }
 
-  if (!data?.leaderboard?.length) {
-    return (
-      <div className="max-w-3xl mx-auto p-8 my-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
-        <Trophy className="mx-auto h-12 w-12 text-text-muted" />
-        <h2 className="mt-4 text-lg font-bold text-text-primary">Leaderboard is empty</h2>
-        <p className="mt-2 text-sm text-text-secondary">
-          No exams have been completed in your batch yet.
-        </p>
-      </div>
-    );
-  }
-
-  const { leaderboard, batchName } = data;
+  const leaderboard = data?.leaderboard || [];
+  const batchName = data?.batchName;
   const myEntry = leaderboard.find((s: any) => s.isCurrentStudent);
   const myRank = myEntry?.rank;
 
@@ -83,9 +62,13 @@ export default function LeaderboardPage() {
       <div className="border-b border-border pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-text-primary">Batch Leaderboard</h1>
-          <p className="mt-1 text-sm font-medium text-text-secondary">
-            Batch: <span className="text-primary font-bold">{batchName}</span> · {leaderboard.length} student{leaderboard.length !== 1 ? 's' : ''}
-          </p>
+          {loading && !data ? (
+            <Skeleton className="h-4 w-48 rounded-md mt-1.5" />
+          ) : (
+            <p className="mt-1 text-sm font-medium text-text-secondary">
+              Batch: <span className="text-primary font-bold">{batchName || 'Default'}</span> · {leaderboard.length} student{leaderboard.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
       </div>
 
@@ -137,75 +120,94 @@ export default function LeaderboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {leaderboard.map((student: any) => {
-                const isMe = student.isCurrentStudent;
-                const isTopThree = student.rank <= 3;
-
-                return (
-                  <tr
-                    key={student.userId}
-                    className={`transition-all ${
-                      isMe
-                        ? 'bg-primary/10 border-l-4 border-l-primary shadow-sm hover:bg-primary/15 font-medium'
-                        : isTopThree
-                        ? 'bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-400'
-                        : 'hover:bg-surface-2/60 border-l-4 border-l-transparent'
-                    }`}
-                  >
-                    <td className="px-4 py-3.5 align-middle">
-                      <RankBadge rank={student.rank} />
-                    </td>
-
-                    <td className="px-4 py-3.5 align-middle">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-bold ${isMe ? 'text-primary' : 'text-text-primary'}`}>
-                          {student.fullName}
-                        </span>
-                        {isMe && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary text-background shadow-xs">
-                            YOU
-                          </span>
-                        )}
-                      </div>
-                      {student.email && (
-                        <p className="text-xs text-text-muted font-normal mt-0.5">{student.email}</p>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3.5 align-middle font-medium text-text-secondary">
-                      {student.rollNumber || '—'}
-                    </td>
-
-                    <td className="px-4 py-3.5 align-middle">
-                      <div className="font-bold text-text-primary">
-                        {student.practicesTaken > 0 ? `${student.practiceAvg}%` : '—'}
-                      </div>
-                      <div className="text-xs text-text-muted">
-                        {student.practicesTaken} taken
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3.5 align-middle">
-                      <div className="font-bold text-text-primary">
-                        {student.examsTaken > 0 ? `${student.examAvg}%` : '—'}
-                      </div>
-                      <div className="text-xs text-text-muted">
-                        {student.examsTaken} taken
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3.5 align-middle">
-                      <span className={`text-base font-black ${
-                        student.totalScore >= 70 ? 'text-emerald-600' :
-                        student.totalScore >= 50 ? 'text-amber-600' :
-                        student.totalScore > 0 ? 'text-red-500' : 'text-text-muted'
-                      }`}>
-                        {student.totalScore > 0 ? `${student.totalScore}%` : '—'}
-                      </span>
-                    </td>
+              {loading && !data ? (
+                [1, 2, 3, 4, 5].map((i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-4 py-3.5"><Skeleton className="h-7 w-7 rounded-full" /></td>
+                    <td className="px-4 py-3.5"><Skeleton className="h-4 w-32 rounded" /></td>
+                    <td className="px-4 py-3.5"><Skeleton className="h-4 w-20 rounded" /></td>
+                    <td className="px-4 py-3.5"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="px-4 py-3.5"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="px-4 py-3.5"><Skeleton className="h-5 w-16 rounded" /></td>
                   </tr>
-                );
-              })}
+                ))
+              ) : leaderboard.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-text-muted">
+                    No leaderboard scores available for this batch yet.
+                  </td>
+                </tr>
+              ) : (
+                leaderboard.map((student: any) => {
+                  const isMe = student.isCurrentStudent;
+                  const isTopThree = student.rank <= 3;
+
+                  return (
+                    <tr
+                      key={student.userId}
+                      className={`transition-all ${
+                        isMe
+                          ? 'bg-primary/10 border-l-4 border-l-primary shadow-sm hover:bg-primary/15 font-medium'
+                          : isTopThree
+                          ? 'bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-400'
+                          : 'hover:bg-surface-2/60 border-l-4 border-l-transparent'
+                      }`}
+                    >
+                      <td className="px-4 py-3.5 align-middle">
+                        <RankBadge rank={student.rank} />
+                      </td>
+
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold ${isMe ? 'text-primary' : 'text-text-primary'}`}>
+                            {student.fullName}
+                          </span>
+                          {isMe && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary text-background shadow-xs">
+                              YOU
+                            </span>
+                          )}
+                        </div>
+                        {student.email && (
+                          <p className="text-xs text-text-muted font-normal mt-0.5">{student.email}</p>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 align-middle font-medium text-text-secondary">
+                        {student.rollNumber || '—'}
+                      </td>
+
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="font-bold text-text-primary">
+                          {student.practicesTaken > 0 ? `${student.practiceAvg}%` : '—'}
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          {student.practicesTaken} taken
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="font-bold text-text-primary">
+                          {student.examsTaken > 0 ? `${student.examAvg}%` : '—'}
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          {student.examsTaken} taken
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 align-middle">
+                        <span className={`text-base font-black ${
+                          student.totalScore >= 70 ? 'text-emerald-600' :
+                          student.totalScore >= 50 ? 'text-amber-600' :
+                          student.totalScore > 0 ? 'text-red-500' : 'text-text-muted'
+                        }`}>
+                          {student.totalScore > 0 ? `${student.totalScore}%` : '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

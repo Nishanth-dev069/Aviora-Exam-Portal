@@ -52,12 +52,9 @@ export const ExamLayout = React.memo(function ExamLayout({
       <WatermarkOverlay email={studentEmail || studentIdentity?.email || 'student@aviora.com'} />
 
       {/* Header */}
-      <header className="col-span-2 flex items-center justify-between px-6 py-2 min-h-[64px] bg-surface border-b border-border shadow-xs z-10 gap-4">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-7 w-auto object-contain" />
-          <span className="text-base font-black tracking-tight text-text-primary">
-            AVIORA <span className="text-text-muted font-normal text-xs ml-0.5">Portal</span>
-          </span>
+      <header className="col-span-2 flex items-center justify-between pl-0 pr-6 h-16 bg-surface border-b border-border shadow-xs z-10 gap-4 overflow-hidden">
+        <div className="h-full flex items-center px-5 bg-[#0F4383] border-r border-blue-900/60 shrink-0">
+          <img src="/aviora-logo-full.png" alt="AVIORA Logo" className="h-10 w-auto object-contain shrink-0 drop-shadow-xs" />
         </div>
         
         <div className="flex-1 flex justify-center items-center text-sm font-medium text-text-primary truncate">

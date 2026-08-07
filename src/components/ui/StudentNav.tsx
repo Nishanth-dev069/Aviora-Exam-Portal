@@ -38,30 +38,27 @@ export function StudentNav({ studentName, photoUrl }: StudentNavProps) {
   const initial = (studentName || 'S').charAt(0).toUpperCase();
 
   return (
-    <header className="bg-surface border-b border-border shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="bg-[#0F4383] border-b border-blue-900/60 shadow-md w-full">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 justify-between items-center">
           
           {/* Logo & Links */}
-          <div className="flex">
-            <Link href="/dashboard" className="flex flex-shrink-0 items-center gap-2.5 mr-8 hover:opacity-90 transition-opacity">
-              <img src="/aviora-logo.png" alt="AVIORA Logo" className="h-8 w-auto object-contain" />
-              <span className="text-lg font-black tracking-tight text-text-primary">
-                AVIORA <span className="text-text-muted font-normal text-xs ml-0.5">Portal</span>
-              </span>
+          <div className="flex items-center">
+            <Link href="/dashboard" className="flex flex-shrink-0 items-center mr-8 hover:opacity-95 transition-opacity">
+              <img src="/aviora-logo-full.png" alt="AVIORA Logo" className="h-10 w-auto object-contain shrink-0 drop-shadow-xs" />
             </Link>
             
-            <nav className="hidden md:flex space-x-8">
+            <nav className="hidden md:flex space-x-6">
               {navLinks.map((link) => {
                 const isActive = pathname.startsWith(link.href);
                 return (
                   <Link
                     key={link.name}
                     href={link.href}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                    className={`inline-flex items-center px-2 pt-1 border-b-2 text-sm font-semibold transition-all ${
                       isActive 
-                        ? 'border-primary text-primary' 
-                        : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border'
+                        ? 'border-white text-white font-black' 
+                        : 'border-transparent text-white/90 hover:text-white hover:brightness-125 hover:border-white/50'
                     }`}
                   >
                     {link.name}
@@ -74,16 +71,16 @@ export function StudentNav({ studentName, photoUrl }: StudentNavProps) {
           {/* User Info & Logout */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full overflow-hidden bg-surface-2 border border-border shrink-0 flex items-center justify-center shadow-xs">
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-white/15 border border-white/30 shrink-0 flex items-center justify-center shadow-xs">
                 {photoUrl ? (
                   <img src={photoUrl} alt={studentName} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold text-xs">
+                  <div className="w-full h-full flex items-center justify-center bg-white/20 text-white font-bold text-xs">
                     {initial}
                   </div>
                 )}
               </div>
-              <span className="hidden sm:block text-sm font-bold text-text-primary">
+              <span className="hidden sm:block text-sm font-bold text-white">
                 {studentName}
               </span>
             </div>
@@ -91,7 +88,7 @@ export function StudentNav({ studentName, photoUrl }: StudentNavProps) {
               variant="ghost" 
               size="sm" 
               onClick={handleLogout}
-              className="text-text-secondary hover:text-danger hover:bg-danger/10"
+              className="text-blue-100 hover:text-red-200 hover:bg-white/10"
             >
               <LogOut className="h-4 w-4 mr-2" />
               Logout

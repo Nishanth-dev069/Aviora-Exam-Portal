@@ -78,22 +78,7 @@ export default function PracticeExamsPage() {
     return grouped;
   }, [filteredExams]);
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6 animate-pulse">
-        <Skeleton className="h-4 w-32 rounded" />
-        <Skeleton className="h-9 w-64 rounded-lg" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <CardSkeleton />
-          <CardSkeleton />
-          <CardSkeleton />
-          <CardSkeleton />
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (error && !data) {
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <div className="p-6 bg-danger/10 border border-danger/20 text-danger rounded-xl flex items-center gap-3 font-bold">
@@ -104,7 +89,7 @@ export default function PracticeExamsPage() {
     );
   }
 
-  const { practiceExams, examStatusMap } = data;
+  const { practiceExams = [], examStatusMap = {} } = data || {};
   const displaySubjects = Object.keys(examsBySubject);
 
   return (
@@ -173,7 +158,14 @@ export default function PracticeExamsPage() {
 
       {/* Subject Grouped Sections */}
       <section className="space-y-8">
-        {filteredExams.length === 0 ? (
+        {loading && !data ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : filteredExams.length === 0 ? (
           <div className="bg-surface rounded-xl p-12 text-center text-text-muted border border-border border-dashed">
             <p className="font-medium">
               {searchQuery || selectedSubject !== 'ALL'
