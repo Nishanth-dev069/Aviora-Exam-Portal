@@ -23,7 +23,7 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deviceBlocked, setDeviceBlocked] = useState(false);
-  
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlErrorCode = searchParams.get('error') || searchParams.get('reason');
@@ -85,7 +85,7 @@ function LoginForm() {
     <div className="h-screen w-full flex flex-col lg:flex-row overflow-hidden bg-background">
       {/* Left Part - System Feature Overview & Blue Background (#0F4383) */}
       <div className="w-full lg:w-1/2 bg-[#0F4383] text-white p-6 sm:p-10 lg:p-12 flex flex-col justify-between relative overflow-hidden shrink-0 h-full">
-        
+
         {/* Subtle background ambient overlay */}
         <div className="absolute -right-20 -bottom-20 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-10 -left-10 w-72 h-72 bg-blue-400/10 rounded-full blur-2xl pointer-events-none" />
@@ -154,19 +154,20 @@ function LoginForm() {
         </div>
       </div>
 
-      {/* Right Part - Login Form Container (Shifted upward, zero space between logo and heading) */}
-      <div className="w-full lg:w-1/2 bg-background p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start pt-4 sm:pt-6 lg:pt-8 h-full overflow-y-auto">
-        <div className="w-full max-w-sm sm:max-w-md flex flex-col items-center">
-          
-          {/* Logo & Heading (Larger logo, zero gap to heading below) */}
-          <div className="flex flex-col items-center text-center mb-2.5">
+      {/* Right Part - Login Form Container (Shifted upward, keeping logo fixed) */}
+      <div className="w-full lg:w-1/2 bg-background p-4 sm:p-6 flex flex-col items-center justify-start pt-1 sm:pt-2 lg:pt-3 h-full overflow-y-auto">
+        <div className="w-full max-w-sm sm:max-w-md flex flex-col items-center -mt-3 sm:-mt-5">
+
+          {/* Logo & Subtitle (Larger logo, tightly coupled) */}
+          <div className="flex flex-col items-center text-center mb-2">
             <img
               src="/aviora-logo.png"
               alt="AVIORA Logo"
-              className="h-36 sm:h-44 md:h-48 w-auto object-contain shrink-0 drop-shadow-md transition-transform hover:scale-105"
+              className="h-48 sm:h-56 md:h-64 w-auto object-contain shrink-0 drop-shadow-md transition-transform hover:scale-105 block"
             />
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-text-primary -mt-2">AVIORA</h2>
-            <p className="text-text-secondary text-xs sm:text-sm font-medium mt-0.5">Aviation Examination Portal Sign In</p>
+            <p className="text-text-secondary text-sm sm:text-base font-semibold -mt-10 sm:-mt-12 md:-mt-14 leading-none">
+              Examination Portal Sign In
+            </p>
           </div>
 
           <div className="w-full bg-surface shadow-xl border border-border rounded-2xl p-5 sm:p-6">
