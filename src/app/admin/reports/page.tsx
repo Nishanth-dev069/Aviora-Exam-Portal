@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { syncExamStatuses } from '@/lib/supabase/syncStatuses';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function ReportsPage() {
   await syncExamStatuses(supabaseAdmin);

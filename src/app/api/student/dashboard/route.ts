@@ -172,6 +172,28 @@ export async function GET(request: Request) {
       });
     }
 
+    // Sanitize unreleased scheduled exam scores
+    (scheduledExamsList || []).forEach((exam: any) => {
+      const statusEntry = examStatusMapObj[exam.id];
+      if (statusEntry && exam.ends_at && new Date(nowIsoStr) < new Date(exam.ends_at) && exam.status !== 'completed') {
+        examStatusMapObj[exam.id] = {
+          ...statusEntry,
+          result: null,
+        };
+      }
+    });
+
+    const filteredRecentResults = (recentResultsList || []).filter((r: any) => {
+      const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
+      if (!ex || ex.type === 'practice') return true;
+      if (ex.type === 'scheduled') {
+        if (ex.status === 'completed') return true;
+        if (ex.ends_at && new Date(nowIsoStr) >= new Date(ex.ends_at)) return true;
+        return false;
+      }
+      return true;
+    });
+
     const enrichedScheduled = (scheduledExamsList || []).map((exam: any) => ({
       ...exam,
       is_available: computeExamAvailability(exam, nowIsoStr),
@@ -207,7 +229,7 @@ export async function GET(request: Request) {
       profile: profileDataObj,
       practiceExams: enrichedPractice,
       scheduledExams: enrichedScheduled,
-      recentResults: recentResultsList || [],
+      recentResults: filteredRecentResults,
       examStatusMap: examStatusMapObj,
       timing: {
         jwt_verification: parseFloat(totalJwt.toFixed(2)),

@@ -42,7 +42,7 @@ export async function GET() {
     if (rpcError || !rpcData) {
       const { data, error } = await supabaseAdmin
         .from('exam_results')
-        .select('id, session_id, exam_id, percentage, total_score, max_score, correct_count, incorrect_count, unanswered_count, time_taken_seconds, is_passed, computed_at, exams(id, title, subject, type, total_questions, duration_minutes)')
+        .select('id, session_id, exam_id, percentage, total_score, max_score, correct_count, incorrect_count, unanswered_count, time_taken_seconds, is_passed, computed_at, exams(id, title, subject, type, total_questions, duration_minutes, ends_at, status)')
         .eq('student_id', user.id)
         .order('computed_at', { ascending: true });
 
@@ -54,7 +54,17 @@ export async function GET() {
       allResults = rpcData || [];
     }
 
-    const results = allResults;
+    const now = new Date();
+    const results = allResults.filter(r => {
+      const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
+      if (!ex || ex.type === 'practice') return true;
+      if (ex.type === 'scheduled') {
+        if (ex.status === 'completed') return true;
+        if (ex.ends_at && now >= new Date(ex.ends_at)) return true;
+        return false;
+      }
+      return true;
+    });
 
     // === COMPUTED STATS ===
     const totalExamsTaken = results.length;

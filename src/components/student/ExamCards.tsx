@@ -50,12 +50,15 @@ export function formatDate(dateStr?: string | null): string {
          d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function getScheduledExamStatus(exam: any, studentEntry: any): 'completed' | 'in_progress' | 'missed' | 'open' | 'closed' | 'upcoming' {
+export function getScheduledExamStatus(exam: any, studentEntry: any): 'completed' | 'submitted_pending' | 'in_progress' | 'missed' | 'open' | 'closed' | 'upcoming' {
   const now = new Date();
   const scheduledAt = exam.scheduled_at ? new Date(exam.scheduled_at) : null;
   const endsAt = exam.ends_at ? new Date(exam.ends_at) : null;
 
   if (studentEntry?.sessionStatus === 'submitted') {
+    if (endsAt && now < endsAt && exam.status !== 'completed') {
+      return 'submitted_pending';
+    }
     return 'completed';
   }
 
@@ -93,6 +96,36 @@ export function getScheduledExamStatus(exam: any, studentEntry: any): 'completed
 export function ScheduledExamCard({ exam, studentEntry }: { exam: any; studentEntry: any }) {
   const status = getScheduledExamStatus(exam, studentEntry);
   const result = studentEntry?.result;
+
+  if (status === 'submitted_pending') {
+    return (
+      <div className="bg-surface rounded-xl shadow-sm border border-primary/30 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:shadow-md">
+        <div className="space-y-2 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary">
+              <Clock className="w-3.5 h-3.5" /> Submitted · Results Pending
+            </span>
+            <h3 className="text-lg font-bold text-text-primary">{exam.title}</h3>
+          </div>
+          <p className="text-sm text-text-secondary">{exam.subject} · {exam.duration_minutes} min · {exam.total_questions} Qs</p>
+          <p className="text-xs text-text-muted">
+            Exam submitted. Detailed score summary, answer review, and leaderboard will be released at {formatDate(exam.ends_at)}.
+          </p>
+        </div>
+
+        <div>
+          {studentEntry?.sessionId && (
+            <Link
+              href={`/exam/result/${studentEntry.sessionId}`}
+              className="px-5 py-2.5 bg-surface border border-border hover:border-primary text-text-primary hover:text-primary font-bold rounded-xl hover:bg-surface-2 transition-colors inline-flex items-center gap-2 text-sm shadow-sm"
+            >
+              <Eye className="w-4 h-4" /> View Submission →
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (status === 'completed') {
     return (

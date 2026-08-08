@@ -26,7 +26,7 @@ export default async function StudentResultsPage() {
     .from('exam_results')
     .select(`
       session_id, percentage, total_score, max_score, is_passed, computed_at,
-      exams(title, subject, type)
+      exams(title, subject, type, ends_at, status)
     `)
     .eq('student_id', user.id)
     .order('computed_at', { ascending: false });
@@ -41,6 +41,8 @@ export default async function StudentResultsPage() {
       </div>
     );
   }
+
+  const now = new Date();
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -83,6 +85,12 @@ export default async function StudentResultsPage() {
                 {results?.map((result: any) => {
                   const exam = Array.isArray(result.exams) ? result.exams[0] : result.exams;
                   const isPractice = exam?.type === 'practice';
+                  const isPending =
+                    exam?.type === 'scheduled' &&
+                    exam?.ends_at &&
+                    now < new Date(exam.ends_at) &&
+                    exam?.status !== 'completed';
+
                   return (
                     <tr key={result.session_id} className="hover:bg-surface-2/50 transition-colors group">
                       <td className="px-6 py-4">
@@ -106,13 +114,24 @@ export default async function StudentResultsPage() {
                         {formatDate(result.computed_at)}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-text-primary">{result.percentage.toFixed(1)}%</span>
-                          <span className="text-xs text-text-secondary">{result.total_score} / {result.max_score} Marks</span>
-                        </div>
+                        {isPending ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-text-muted italic">Pending Release</span>
+                            <span className="text-[11px] text-text-muted">Releases at {exam?.ends_at ? new Date(exam.ends_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'exam end'}</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-text-primary">{result.percentage.toFixed(1)}%</span>
+                            <span className="text-xs text-text-secondary">{result.total_score} / {result.max_score} Marks</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        {result.is_passed === true ? (
+                        {isPending ? (
+                          <span className="inline-flex items-center gap-1.5 text-text-muted font-bold text-xs bg-surface-3 px-2.5 py-1 rounded-full border border-border">
+                            ● Pending Release
+                          </span>
+                        ) : result.is_passed === true ? (
                           <span className="inline-flex items-center gap-1.5 text-success font-bold text-sm bg-success/10 px-2.5 py-1 rounded-full">
                             <CheckCircle2 className="w-4 h-4" /> Passed
                           </span>
@@ -128,8 +147,8 @@ export default async function StudentResultsPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link href={`/exam/result/${result.session_id}`}>
-                          <Button variant="ghost" size="sm" className="group-hover:bg-primary group-hover:text-white transition-all">
-                            View <ChevronRight className="w-4 h-4 ml-1" />
+                          <Button variant="ghost" size="sm" className="group-hover:bg-primary group-hover:text-white transition-all text-xs font-bold">
+                            {isPending ? 'Status' : 'View'} <ChevronRight className="w-4 h-4 ml-1" />
                           </Button>
                         </Link>
                       </td>

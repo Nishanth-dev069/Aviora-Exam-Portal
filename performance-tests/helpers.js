@@ -89,9 +89,9 @@ export function getVUToken(students) {
     return { token: vuToken, cookieHeader: vuCookieHeader, student: vuStudent, success: true };
   }
 
-  // Stagger initial login requests slightly during rapid VU ramp-ups (e.g. 150 VU spikes)
+  // Stagger initial login requests slightly during rapid VU ramp-ups
   if (!vuToken && exec.vu.iterationInScenario === 0) {
-    sleep(Math.random() * 1.2);
+    sleep(Math.random() * 1.5);
   }
 
   let attempts = 0;
@@ -117,7 +117,7 @@ export function getVUToken(students) {
   return { token: null, cookieHeader: '', student, success: false };
 }
 
-function getAuthHeaders(tokenOrSession) {
+export function getAuthHeaders(tokenOrSession) {
   let token = tokenOrSession;
   let cookieHeader = '';
   if (typeof tokenOrSession === 'object' && tokenOrSession !== null) {
@@ -182,7 +182,7 @@ export function startExam(tokenOrSession, examId) {
     'Start Exam HTTP status is 200': (r) => r.status === 200,
     'Exam session created': () => data && data.session && Boolean(data.session.id),
     'Submission token generated': () => data && data.session && Boolean(data.session.submission_token),
-    'Exam questions loaded': () => data && Array.isArray(data.questions),
+    'Exam questions loaded': () => data && Array.isArray(data.questions) && data.questions.length > 0,
   });
 
   if (res.status !== 200) {
@@ -199,7 +199,63 @@ export function startExam(tokenOrSession, examId) {
 }
 
 /**
- * Syncs student answers (autosave) POST /api/exam/sync
+ * Sends active exam session heartbeat POST /api/exam/heartbeat (every 10s in production)
+ */
+export function sendExamHeartbeat(tokenOrSession, sessionId) {
+  const url = `${config.BASE_URL}${config.HEARTBEAT_ENDPOINT}`;
+  const payload = JSON.stringify({
+    session_id: sessionId || 'dashboard',
+  });
+
+  const params = {
+    headers: getAuthHeaders(tokenOrSession),
+    tags: { name: 'POST /api/exam/heartbeat' },
+  };
+
+  const res = http.post(url, payload, params);
+
+  let data = null;
+  try {
+    data = res.json();
+  } catch (e) { }
+
+  const success = check(res, {
+    'Heartbeat HTTP status is 200': (r) => r.status === 200,
+    'Heartbeat response valid': () => data && data.valid === true,
+  });
+
+  return { res, success, data };
+}
+
+/**
+ * Sends global app heartbeat POST /api/heartbeat
+ */
+export function sendGlobalHeartbeat(tokenOrSession) {
+  const url = `${config.BASE_URL}${config.GLOBAL_HEARTBEAT_ENDPOINT}`;
+  const payload = JSON.stringify({});
+
+  const params = {
+    headers: getAuthHeaders(tokenOrSession),
+    tags: { name: 'POST /api/heartbeat' },
+  };
+
+  const res = http.post(url, payload, params);
+
+  let data = null;
+  try {
+    data = res.json();
+  } catch (e) { }
+
+  const success = check(res, {
+    'Global Heartbeat HTTP status is 200': (r) => r.status === 200,
+    'Global Heartbeat valid': () => data && data.valid === true,
+  });
+
+  return { res, success, data };
+}
+
+/**
+ * UUID generator for k6
  */
 export function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -209,12 +265,17 @@ export function generateUUID() {
   });
 }
 
-export function syncAnswers(tokenOrSession, sessionId, syncId, answers) {
+/**
+ * Syncs student answers (autosave batch) POST /api/exam/sync (runs every 10s in production)
+ */
+export function syncAnswers(tokenOrSession, sessionId, syncId, answers, securityEvents = [], securityViolations = 0) {
   const url = `${config.BASE_URL}${config.SYNC_ENDPOINT}`;
   const payload = JSON.stringify({
     session_id: sessionId,
     sync_id: syncId || generateUUID(),
     answers: answers || [],
+    security_events: securityEvents,
+    security_violations: securityViolations,
   });
 
   const params = {
@@ -224,15 +285,52 @@ export function syncAnswers(tokenOrSession, sessionId, syncId, answers) {
 
   const res = http.post(url, payload, params);
 
+  let data = null;
+  try {
+    data = res.json();
+  } catch (e) { }
+
   if (res.status !== 200) {
     console.log(`[SYNC_FAIL] VU=${exec.vu.idInTest} status=${res.status} duration=${res.timings.duration}ms body=${res.body}`);
   }
 
-  check(res, {
-    'Autosave HTTP status is 200': (r) => r.status === 200,
+  const success = check(res, {
+    'Autosave Sync HTTP status is 200': (r) => r.status === 200,
   });
 
-  return res;
+  return { res, success, data };
+}
+
+/**
+ * Sends anti-cheat security violation event POST /api/exam/security-event
+ */
+export function sendSecurityEvent(tokenOrSession, sessionId, eventType = 'window_blur', eventData = {}) {
+  const url = `${config.BASE_URL}${config.SECURITY_EVENT_ENDPOINT}`;
+  const payload = JSON.stringify({
+    session_id: sessionId,
+    event_type: eventType,
+    event_data: eventData,
+    occurred_at: new Date().toISOString(),
+  });
+
+  const params = {
+    headers: getAuthHeaders(tokenOrSession),
+    tags: { name: 'POST /api/exam/security-event' },
+  };
+
+  const res = http.post(url, payload, params);
+
+  let data = null;
+  try {
+    data = res.json();
+  } catch (e) { }
+
+  const success = check(res, {
+    'Security Event HTTP status is 200': (r) => r.status === 200,
+    'Security violation acknowledged': () => data && data.success === true,
+  });
+
+  return { res, success, data };
 }
 
 /**
@@ -257,12 +355,16 @@ export function submitExam(tokenOrSession, sessionId, submissionToken) {
     data = res.json();
   } catch (e) { }
 
-  check(res, {
+  const success = check(res, {
     'Submit Exam HTTP status is 200': (r) => r.status === 200,
     'Submission acknowledged': () => data && (data.success === true || Boolean(data.id || data.session_id)),
   });
 
-  return { res, data };
+  if (res.status !== 200) {
+    console.log(`[SUBMIT_FAIL] VU=${exec.vu.idInTest} status=${res.status} duration=${res.timings.duration}ms body=${res.body}`);
+  }
+
+  return { res, success, data };
 }
 
 /**
@@ -271,15 +373,6 @@ export function submitExam(tokenOrSession, sessionId, submissionToken) {
 export function sleepRandom(minSec = 1, maxSec = 3) {
   const duration = Math.random() * (maxSec - minSec) + minSec;
   sleep(duration);
-}
-
-/**
- * Generic response validator helper
- */
-export function validateResponse(res, expectedStatus = 200, checkName = 'HTTP Status OK') {
-  return check(res, {
-    [checkName]: (r) => r.status === expectedStatus,
-  });
 }
 
 /**
@@ -297,48 +390,54 @@ export function generateHTMLReport(data) {
   <meta charset="UTF-8">
   <title>Aviora Exam Portal - Performance Test Report</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
-    .container { max-width: 1000px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-    h1 { color: #38bdf8; border-bottom: 2px solid #334155; padding-bottom: 12px; margin-top: 0; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 25px 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0b1120; color: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 1100px; margin: 0 auto; background: #1e293b; padding: 32px; border-radius: 12px; box-shadow: 0 20px 35px rgba(0,0,0,0.6); border: 1px solid #334155; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { color: #38bdf8; margin: 0; font-size: 26px; }
+    .badge { background: #0284c7; color: white; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin: 24px 0; }
     .card { background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155; text-align: center; }
-    .card .val { font-size: 28px; font-weight: bold; color: #4ade80; margin-top: 8px; }
+    .card .val { font-size: 30px; font-weight: 700; color: #4ade80; margin-top: 8px; }
     .card .val.warn { color: #facc15; }
     .card .val.error { color: #f87171; }
-    .card .lbl { font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    .card .lbl { font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
+    table { width: 100%; border-collapse: collapse; margin-top: 24px; background: #0f172a; border-radius: 8px; overflow: hidden; }
     th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }
-    th { background: #0f172a; color: #38bdf8; }
-    .timestamp { font-size: 12px; color: #64748b; margin-top: 30px; text-align: right; }
+    th { background: #1e293b; color: #38bdf8; font-size: 14px; }
+    tr:last-child td { border-bottom: none; }
+    .footer { font-size: 12px; color: #64748b; margin-top: 30px; text-align: right; border-top: 1px solid #334155; padding-top: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🚀 Aviora Performance Test Executive Report</h1>
+    <div class="header">
+      <h1>🚀 Aviora Examination Portal • Performance Report</h1>
+      <span class="badge">Target: portal.avioraaviation.in</span>
+    </div>
     <div class="grid">
       <div class="card">
         <div class="lbl">Total Requests</div>
         <div class="val">${metrics.http_reqs ? metrics.http_reqs.values.count : 0}</div>
       </div>
       <div class="card">
-        <div class="lbl">P95 Latency</div>
-        <div class="val ${(reqDuration['p(95)'] || 0) > 500 ? 'warn' : ''}">${(reqDuration['p(95)'] || 0).toFixed(2)} ms</div>
+        <div class="lbl">P95 Response Time</div>
+        <div class="val ${(reqDuration['p(95)'] || 0) > 600 ? 'warn' : ''}">${(reqDuration['p(95)'] || 0).toFixed(1)} ms</div>
       </div>
       <div class="card">
         <div class="lbl">Failure Rate</div>
         <div class="val ${(reqFailed.rate || 0) > 0.01 ? 'error' : ''}">${((reqFailed.rate || 0) * 100).toFixed(2)} %</div>
       </div>
       <div class="card">
-        <div class="lbl">Peak VUs</div>
+        <div class="lbl">Peak Active Students</div>
         <div class="val">${vus.max || 0}</div>
       </div>
     </div>
 
-    <h2>Detailed Metrics Breakdown</h2>
+    <h2>Detailed Latency Breakdown (ms)</h2>
     <table>
       <thead>
         <tr>
-          <th>Metric Name</th>
+          <th>Metric</th>
           <th>Average</th>
           <th>Min</th>
           <th>Med (P50)</th>
@@ -349,17 +448,20 @@ export function generateHTMLReport(data) {
       </thead>
       <tbody>
         <tr>
-          <td><strong>HTTP Req Duration (ms)</strong></td>
-          <td>${(reqDuration.avg || 0).toFixed(2)}</td>
-          <td>${(reqDuration.min || 0).toFixed(2)}</td>
-          <td>${(reqDuration.med || 0).toFixed(2)}</td>
-          <td>${(reqDuration['p(90)'] || 0).toFixed(2)}</td>
-          <td>${(reqDuration['p(95)'] || 0).toFixed(2)}</td>
-          <td>${(reqDuration.max || 0).toFixed(2)}</td>
+          <td><strong>HTTP Request Duration</strong></td>
+          <td>${(reqDuration.avg || 0).toFixed(1)} ms</td>
+          <td>${(reqDuration.min || 0).toFixed(1)} ms</td>
+          <td>${(reqDuration.med || 0).toFixed(1)} ms</td>
+          <td>${(reqDuration['p(90)'] || 0).toFixed(1)} ms</td>
+          <td>${(reqDuration['p(95)'] || 0).toFixed(1)} ms</td>
+          <td>${(reqDuration.max || 0).toFixed(1)} ms</td>
         </tr>
       </tbody>
     </table>
-    <div class="timestamp">Generated by Grafana k6 • Aviora Portal Suite</div>
+
+    <div class="footer">
+      Generated automatically by Grafana k6 • Aviora Production Performance Suite
+    </div>
   </div>
 </body>
 </html>`;

@@ -84,15 +84,13 @@ export function StudentNav({ studentName, photoUrl }: StudentNavProps) {
                 {studentName}
               </span>
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <button 
               onClick={handleLogout}
-              className="text-blue-100 hover:text-red-200 hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs sm:text-sm font-bold shadow-sm shadow-red-950/25 transition-all cursor-pointer border border-red-500/40 hover:border-red-600"
             >
-              <LogOut className="h-4 w-4 mr-2" />
+              <LogOut className="h-4 w-4 shrink-0" />
               Logout
-            </Button>
+            </button>
           </div>
 
         </div>

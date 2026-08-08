@@ -1,28 +1,38 @@
 /* eslint-disable */
 import { SharedArray } from 'k6/data';
 import { config } from './config.js';
-import { getStudentForVU, login, sleepRandom, generateHTMLReport } from './helpers.js';
+import { getVUToken, loadDashboard, sendGlobalHeartbeat, sleepRandom, generateHTMLReport } from './helpers.js';
 
-// Load 100 student credentials once per test run
+// Load 100 unique student credentials
 const students = new SharedArray('students', function () {
   return JSON.parse(open('./students.json'));
 });
 
 export const options = {
-  vus: 10,
-  duration: '30s',
-  thresholds: config.THRESHOLDS.SMOKE,
+  stages: [
+    { duration: '30s', target: 25 },  // Wave 1: 25 students arrive & authenticate
+    { duration: '1m', target: 75 },   // Wave 2: 75 students authenticated & in lobby
+    { duration: '1m', target: 100 },  // Full exam hall: 100 students authenticated & active
+    { duration: '30s', target: 0 },   // Transition into exam room
+  ],
+  thresholds: config.THRESHOLDS.LOAD,
 };
 
 export default function () {
-  // Select distinct student account per VU ID
-  const student = getStudentForVU(students);
+  // 1. Authenticate ONCE per Virtual User (JWT + Cookie cached in VU memory)
+  // This accurately models a student logging in once at the exam hall entrance.
+  const session = getVUToken(students);
 
-  // Execute login
-  const { res, success, token, refreshToken } = login(student);
+  if (session.success && session.token) {
+    // 2. Student lands on dashboard & views upcoming exams
+    loadDashboard(session);
 
-  // Think time between iterations
-  sleepRandom(1, 2);
+    // 3. Global session heartbeat keeping student active in lobby
+    sendGlobalHeartbeat(session);
+  }
+
+  // Realistic dwell time on dashboard before next lobby status check (8 to 15 seconds)
+  sleepRandom(8, 15);
 }
 
 export function handleSummary(data) {
@@ -38,11 +48,12 @@ function textSummary(data) {
   const failed = data.metrics.http_req_failed ? data.metrics.http_req_failed.values : {};
   return `
 =====================================================
-  LOGIN TEST SUMMARY
+  100-STUDENT REALISTIC ARRIVAL & LOGIN SUMMARY
 =====================================================
   Total Requests : ${data.metrics.http_reqs ? data.metrics.http_reqs.values.count : 0}
   P95 Latency    : ${(duration['p(95)'] || 0).toFixed(2)} ms
   Failure Rate   : ${((failed.rate || 0) * 100).toFixed(2)} %
+  Peak VUs       : ${data.metrics.vus ? data.metrics.vus.values.max : 0}
 =====================================================
 `;
 }

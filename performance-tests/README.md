@@ -1,23 +1,45 @@
-# 🚀 Aviora Examination Portal - Performance Testing Suite
+# 🚀 Aviora Examination Portal - Production Performance Testing Suite
 
 A production-grade, modular performance testing suite built with **Grafana k6** designed to stress-test and benchmark the Aviora Examination Portal under realistic concurrent student load.
 
 ---
 
-## 🏗️ Architecture Overview
+## 🎯 Target Application
 
-The performance suite mirrors the exact production authentication and examination lifecycle:
+* **Production URL:** `https://portal.avioraaviation.in`
+* **Default Exam ID:** `3534d2bb-ac6f-4ee2-8174-64c38fe6a780` (Override with `-e EXAM_ID=<uuid>`)
+* **Core Endpoints Tested:**
+  * `POST /api/auth/login` (Authentication & Device Session)
+  * `GET /api/student/dashboard` (Profile & Scheduled Exams)
+  * `POST /api/heartbeat` (Global Lobby Heartbeat)
+  * `POST /api/exam/start` (Session Initialization & Question Shuffling)
+  * `POST /api/exam/heartbeat` (**10-Second Active Session Heartbeat**)
+  * `POST /api/exam/sync` (**10-Second Batch Autosave Queue**)
+  * `POST /api/exam/security-event` (Anti-Cheat / Tab-Switch Logging)
+  * `POST /api/exam/submit` (Final Exam Submission & Grading)
+
+---
+
+## 🏗️ Real Student Lifecycle Architecture
+
+The test suite mirrors the exact client-side runtime behavior of the Aviora portal:
 
 ```
-[Virtual User] ──> POST /api/auth/login ──> [Supabase Auth + Device Check]
+[Virtual Student]
        │
-       ├──> GET /api/student/dashboard ──> [Student Dashboard Data]
+       ├──> POST /api/auth/login ──────────> [Supabase Auth + Device Check]
        │
-       ├──> POST /api/exam/start ───────> [Session Creation & Question Fetch]
+       ├──> GET /api/student/dashboard ────> [Dashboard & Exam Schedule]
        │
-       ├──> POST /api/exam/sync ────────> [Autosave Answer Sync]
+       ├──> POST /api/exam/start ──────────> [RPC: create_exam_session + Signed URLs]
        │
-       └──> POST /api/exam/submit ──────> [Exam Evaluation & Submission]
+       ├──> loop Every 10s: POST /api/exam/heartbeat ──> [Session Keep-Alive & Single-Device Enforcement]
+       │
+       ├──> loop Every 10s: POST /api/exam/sync ───────> [RPC: sync_exam_answers batch]
+       │
+       ├──> opt (5%): POST /api/exam/security-event ──> [Window Blur / Tab Switch Event]
+       │
+       └──> POST /api/exam/submit ─────────> [RPC: submit_exam_session Evaluation]
 ```
 
 ---
@@ -27,20 +49,21 @@ The performance suite mirrors the exact production authentication and examinatio
 ```
 performance-tests/
 ├── config.js               # Centralized configuration, endpoints, headers, thresholds
-├── helpers.js              # Reusable k6 API helpers & HTML report generator
+├── helpers.js              # Reusable k6 API helpers, token caching, HTML report generator
 ├── students.json           # 100 pre-generated unique test student credentials & device IDs
 │
-├── 01-smoke.js             # Smoke test (10 VUs, 30s)
-├── 02-login.js             # Login test (10 VUs distinct accounts)
-├── 03-dashboard.js         # Dashboard load test
-├── 04-start-exam.js        # Exam start session initialization test
-├── 05-load.js              # Sustained load test (100 VUs, 5-min hold)
-├── 06-spike.js             # Spike test (0 -> 150 VUs in 10s)
-├── 07-stress.js            # Stress test (100 -> 1000 VUs breaking point test)
-├── 08-soak.js              # Soak test (100 VUs for 2 hours)
-├── 09-full-exam-flow.js    # Complete end-to-end student exam journey
+├── 01-smoke.js             # Smoke test (5 VUs, 30s) across all 8 endpoints
+├── 02-login.js             # Staggered login test (100 students arriving over 3m)
+├── 02-login-realistic.js   # Single-iteration login benchmark (100 students logging in once)
+├── 03-dashboard.js         # Waiting lobby load test with 10s global heartbeats
+├── 04-start-exam.js        # Exam Start Surge (100 students starting at T=0)
+├── 05-load.js              # Sustained 100-student active exam load test
+├── 06-spike.js             # Sudden surge spike test (0 -> 150 VUs in 10s)
+├── 07-stress.js            # Step-stress breakpoint test (50 -> 100 -> 200 -> 350 -> 500 VUs)
+├── 08-soak.js              # Long-duration reliability test (1 to 2 hours sustained)
+├── 09-full-exam-flow.js    # Master end-to-end production simulation (30 to 45 mins)
 │
-├── seed-test-students.sql  # SQL script to seed 100 student accounts in Supabase
+├── seed-test-students.js   # Node.js script to seed test accounts in Supabase
 └── CLEANUP.sql             # SQL script to safely purge performance test data
 ```
 
@@ -49,108 +72,109 @@ performance-tests/
 ## ⚡ Quick Start Guide
 
 ### Step 1: Install Grafana k6
-- **Windows (winget):** `winget install k6`
-- **Windows (Chocolatey):** `choco install k6`
-- **macOS:** `brew install k6`
-- **Linux:** `sudo apt-get install k6`
+* **Windows (winget):** `winget install k6`
+* **Windows (Chocolatey):** `choco install k6`
+* **macOS:** `brew install k6`
+* **Linux:** `sudo apt-get install k6`
 
-### Step 2: Seed Test Data in Supabase
-Open your Supabase SQL Editor and execute `seed-test-students.sql`.
-This creates 100 student accounts (`student001@test.com` to `student100@test.com`) with pre-registered device IDs matching `students.json`.
+### Step 2: Ensure Test Students are Seeded
+```bash
+node performance-tests/seed-test-students.js
+```
 
 ---
 
-## 🏃 Running Tests
+## 🏃 Running the Production Tests
 
-### 1. Smoke Test
-Verifies baseline API endpoint availability and HTTP 200 response codes.
+All tests default to `https://portal.avioraaviation.in`. You can override the base URL or exam ID anytime with `-e BASE_URL=...` and `-e EXAM_ID=...`.
+
+### 1. Smoke Sanity Test
+Verifies all 8 production endpoints are responsive:
 ```bash
 k6 run 01-smoke.js
 ```
 
-### 2. Login Test
-Tests parallel authentication against `/api/auth/login` using distinct VU accounts.
+### 2. Staggered Student Arrival & Login
+Simulates 100 students arriving and logging in over 3 minutes:
 ```bash
 k6 run 02-login.js
 ```
 
-### 3. Dashboard Test
-Measures student dashboard fetching latency and throughput under concurrent load.
+### 3. Dashboard Waiting Lobby Test
+Tests 100 students in the lobby before exam start, sending 10s global heartbeats:
 ```bash
 k6 run 03-dashboard.js
 ```
 
-### 4. Start Exam Test
-Validates concurrent exam session creation and question payload retrieval.
+### 4. Exam Start Surge (Peak Instantaneous Load)
+Simulates 100 students clicking **"Start Exam"** at the exact same time ($T=0$):
 ```bash
 k6 run 04-start-exam.js
 ```
 
-### 5. Sustained Load Test (100 Concurrent Students)
-Simulates peak exam traffic ramping up to 100 VUs with a 5-minute sustained hold.
+### 5. Sustained 100-Student Active Exam Test
+Simulates 100 concurrent students actively answering questions with continuous 10s heartbeats and 10s autosaves:
 ```bash
 k6 run 05-load.js
 ```
 
-### 6. Spike Test (Sudden Traffic Surge)
-Simulates 150 students logging in and starting exams simultaneously within 10 seconds.
+### 6. Spike Surge Test (150% Load)
+Tests system elasticity with 150 students joining in 10 seconds:
 ```bash
 k6 run 06-spike.js
 ```
 
-### 7. Stress Test (Finding System Breaking Point)
-Ramps load from 100 to 1,000 VUs in steps to determine max server capacity and bottleneck limits.
+### 7. Step-Stress Test (Finding the Breaking Point)
+Ramps load from **50 $\to$ 100 $\to$ 200 $\to$ 350 $\to$ 500 VUs** in stages to identify maximum throughput:
 ```bash
 k6 run 07-stress.js
 ```
 
-### 8. Soak Test (Reliability & Memory Leak Validation)
-Runs 100 VUs for 2 hours to detect server memory leaks, connection exhaustion, or database slowdowns.
+### 8. Soak / Endurance Test (1 to 2 Hours)
+Validates system memory stability, connection pool health, and continuous token refresh over an extended exam:
 ```bash
-# Default (2 hours):
+# Default (1 Hour):
 k6 run 08-soak.js
 
-# Custom duration (e.g., 15 minutes):
-k6 run -e SOAK_DURATION=15m 08-soak.js
+# Custom (e.g. 2 Hours):
+k6 run -e SOAK_DURATION=2h 08-soak.js
 ```
 
-### 9. Full Exam Flow (End-to-End Simulation)
-Simulates realistic student behavior: Login → Dashboard → Start Exam → Answer & Sync → Submit → View Results.
+### 9. Master End-to-End Exam Simulation (30 to 45 Minutes)
+Simulates the complete real-world examination timeline from entrance to graduation:
+* **0–5m:** Pre-exam lobby & dashboard check
+* **5m:** Start surge at $T=0$
+* **5–35m:** 30 minutes of live exam taking (10s heartbeats, 10s autosaves, anti-cheat events)
+* **35–38m:** Staggered submissions
+* **38–40m:** Results retrieval
 ```bash
+# Default (30 Minutes):
 k6 run 09-full-exam-flow.js
+
+# Custom (e.g. 45 Minutes or 1 Hour):
+k6 run -e EXAM_DURATION=45m 09-full-exam-flow.js
 ```
 
 ---
 
-## 🔧 Overriding Environment Variables
+## 📊 Reports & Visual Artifacts
 
-You can pass custom target URLs or Exam IDs directly via environment variables:
+After every test execution, k6 generates:
+1. **Terminal Summary Output** with P95 latency and error rate.
+2. **Interactive HTML Report** (e.g. `soak-test-report.html`, `full-exam-flow-report.html`).
+3. **Structured JSON Metrics** (e.g. `full-exam-flow-summary.json`).
 
-```bash
-k6 run -e BASE_URL=https://staging.aviora-exam.com -e EXAM_ID=your-published-exam-uuid 09-full-exam-flow.js
-```
-
----
-
-## 📊 Reports & Artifacts
-
-After every test run, k6 generates:
-1. **Console Summary Output** (`stdout`)
-2. **Interactive HTML Report** (e.g., `load-test-report.html`)
-3. **Structured JSON Metrics Summary** (e.g., `load-test-summary.json`)
-
-To open the HTML report in your browser:
+To view the generated HTML report in your browser:
 ```bash
 # Windows
-start load-test-report.html
+start full-exam-flow-report.html
 
 # macOS
-open load-test-report.html
+open full-exam-flow-report.html
 ```
 
 ---
 
-## 🧹 Post-Test Cleanup
+## 🧹 Post-Testing Data Cleanup
 
-When performance testing is complete, run `CLEANUP.sql` in your Supabase SQL Editor.
-It safely deletes all test users (`%@test.com`), test sessions, answers, audit logs, and test results without modifying your database schema or production data.
+When your performance testing is finished, execute [`CLEANUP.sql`](file:///c:/Users/Nishanth/Desktop/Aviora%20Exam%20Portal/performance-tests/CLEANUP.sql) in your Supabase SQL Editor. It safely deletes test sessions, answers, and audit logs without affecting real student records.

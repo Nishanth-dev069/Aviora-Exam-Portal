@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -68,6 +69,16 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
   const [sortCol, setSortCol] = useState<'rank' | 'percentage' | 'full_name' | 'total_score'>('rank');
   const [sortAsc, setSortAsc] = useState(true);
 
+  useEffect(() => {
+    setExamList(exams || []);
+    if ((exams || []).length > 0) {
+      setSelectedExamId(prev => (exams.some(e => e.id === prev) ? prev : exams[0].id));
+    } else {
+      setSelectedExamId('');
+      setData(null);
+    }
+  }, [exams]);
+
   // Always fetch fresh exams on mount to prevent Next.js App Router stale caching
   useEffect(() => {
     let cancelled = false;
@@ -77,10 +88,13 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
         if (!res.ok || cancelled) return;
         const json = await res.json();
         const freshExams = json.data || json.exams || [];
-        if (!cancelled && freshExams.length > 0) {
+        if (!cancelled) {
           setExamList(freshExams);
-          if (!selectedExamId) {
-            setSelectedExamId(freshExams[0].id);
+          if (freshExams.length > 0) {
+            setSelectedExamId(prev => (freshExams.some((e: any) => e.id === prev) ? prev : freshExams[0].id));
+          } else {
+            setSelectedExamId('');
+            setData(null);
           }
         }
       } catch (e) {
@@ -92,7 +106,11 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
   }, []);
 
   const fetchReportData = async (examId: string) => {
-    if (!examId) return;
+    if (!examId) {
+      setData(null);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setFetchError(null);
     try {
@@ -115,7 +133,11 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
   };
 
   useEffect(() => {
-    fetchReportData(selectedExamId);
+    if (selectedExamId) {
+      fetchReportData(selectedExamId);
+    } else {
+      setData(null);
+    }
   }, [selectedExamId]);
 
   // Client-side CSV generator function
@@ -221,11 +243,11 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
 
   return (
     <div className="space-y-6">
-      
+
       {/* Selector */}
       <div className="flex items-center gap-4 bg-surface p-4 rounded-xl border border-border shadow-sm">
         <label className="font-bold text-text-secondary text-sm whitespace-nowrap">Select Exam:</label>
-        <select 
+        <select
           value={selectedExamId}
           onChange={(e) => setSelectedExamId(e.target.value)}
           className="w-full md:w-96 px-3 py-2 bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-semibold"
@@ -239,7 +261,7 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
       {fetchError && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
           <p className="text-red-700 font-bold text-sm">{fetchError}</p>
-          <button 
+          <button
             onClick={() => selectedExamId && fetchReportData(selectedExamId)}
             className="mt-3 text-xs font-bold text-red-600 underline hover:no-underline"
           >
@@ -276,7 +298,7 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
 
       {!isLoading && data && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-          
+
           {/* Report Tabs */}
           <div className="flex border-b border-border">
             <button
@@ -309,7 +331,7 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
                     Subject: <span className="font-bold text-text-primary">{data.exam.subject}</span> • Type: <span className="font-bold text-text-primary capitalize">{data.exam.type}</span> • Duration: <span className="font-bold text-text-primary">{data.exam.duration_minutes}m</span>
                   </p>
                 </div>
-                <button 
+                <button
                   onClick={handleExportSummaryCSV}
                   className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-surface-2 rounded-lg text-xs font-bold text-text-primary transition-colors"
                 >
@@ -325,7 +347,7 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
                   <div className="text-3xl font-black text-text-primary">{data.summary.submitted}<span className="text-base text-text-muted font-normal"> / {data.summary.enrolled}</span></div>
                   <div className="text-xs text-text-muted mt-1 font-medium">{data.summary.not_attempted} Did Not Submit</div>
                 </div>
-                
+
                 <div className="bg-emerald-500/10 p-4 rounded-xl border border-emerald-500/20">
                   <div className="text-xs font-bold text-emerald-700 uppercase mb-1 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Pass Rate
@@ -370,7 +392,7 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
                   <h2 className="text-lg font-bold text-text-primary">Per-Student Results Table</h2>
                   <p className="text-xs text-text-secondary mt-1">Detailed breakdown for all {data.summary.submitted} submitted students.</p>
                 </div>
-                <button 
+                <button
                   onClick={handleExportStudentsCSV}
                   className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-surface-3 rounded-lg text-xs font-bold text-text-primary transition-colors"
                 >
@@ -437,7 +459,7 @@ export default function PostExamReport({ exams }: { exams: { id: string, title: 
                   <h2 className="text-lg font-bold text-text-primary">Question Difficulty & Accuracy Analysis</h2>
                   <p className="text-xs text-text-secondary mt-1">Questions sorted by lowest correct percentage (hardest questions first).</p>
                 </div>
-                <button 
+                <button
                   onClick={handleExportQuestionsCSV}
                   className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-surface-3 rounded-lg text-xs font-bold text-text-primary transition-colors"
                 >

@@ -103,9 +103,20 @@ export async function GET() {
       }
     });
 
+    const now = new Date();
+    (rawScheduled || scheduledExams || []).forEach((exam: any) => {
+      const statusEntry = examStatusMap[exam.id];
+      if (statusEntry && exam.ends_at && now < new Date(exam.ends_at) && exam.status !== 'completed') {
+        examStatusMap[exam.id] = {
+          ...statusEntry,
+          result: null,
+        };
+      }
+    });
+
     return NextResponse.json({
       practiceExams: practiceExams || [],
-      scheduledExams: scheduledExams || [],
+      scheduledExams: scheduledExams || rawScheduled || [],
       examStatusMap,
     });
 

@@ -82,9 +82,9 @@ function LoginForm() {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col lg:flex-row overflow-hidden bg-background">
+    <div className="min-h-screen lg:h-screen w-full flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden bg-background">
       {/* Left Part - System Feature Overview & Blue Background (#0F4383) */}
-      <div className="w-full lg:w-1/2 bg-[#0F4383] text-white p-6 sm:p-10 lg:p-12 flex flex-col justify-between relative overflow-hidden shrink-0 h-full">
+      <div className="w-full lg:w-1/2 bg-[#0F4383] text-white p-6 sm:p-10 lg:p-12 flex flex-col justify-between relative overflow-hidden shrink-0 min-h-[420px] lg:h-full">
 
         {/* Subtle background ambient overlay */}
         <div className="absolute -right-20 -bottom-20 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
@@ -154,9 +154,9 @@ function LoginForm() {
         </div>
       </div>
 
-      {/* Right Part - Login Form Container (Moved downward with top padding) */}
-      <div className="w-full lg:w-1/2 bg-background p-4 sm:p-6 flex flex-col items-center justify-start pt-8 sm:pt-12 lg:pt-14 h-full overflow-y-auto">
-        <div className="w-full max-w-sm sm:max-w-md flex flex-col items-center">
+      {/* Right Part - Login Form Container (Always Centered) */}
+      <div className="w-full lg:w-1/2 bg-background p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center h-full overflow-y-auto">
+        <div className="w-full max-w-sm sm:max-w-md flex flex-col items-center justify-center my-auto">
 
           {/* Logo & Subtitle */}
           <div className="flex flex-col items-center text-center mb-3">

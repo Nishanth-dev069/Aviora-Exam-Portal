@@ -1,7 +1,11 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import ResultTabs from '@/components/exam/ResultTabs';
+import PendingResultView from '@/components/exam/PendingResultView';
 import { LeaderboardEntry } from '@/components/exam/Leaderboard';
 import { getSignedUrl } from '@/lib/storage/signed-urls';
 
@@ -54,13 +58,42 @@ export default async function ResultPage({ params }: { params: Promise<{ session
     redirect('/dashboard'); // Forbidden
   }
 
-  // 4. Fetch Exam Details, Leaderboard Top Results, and Submission Count in Parallel
-  const [examRes, topResultsRes, countRes] = await Promise.all([
-    supabaseAdmin
-      .from('exams')
-      .select('title, type, settings')
-      .eq('id', result.exam_id)
-      .single(),
+  // 4. Fetch Exam Details
+  const { data: exam } = await supabaseAdmin
+    .from('exams')
+    .select('title, subject, type, settings, scheduled_at, ends_at, status, total_questions')
+    .eq('id', result.exam_id)
+    .single();
+
+  if (!exam) {
+    notFound();
+  }
+
+  // Check if results should be withheld until exam end time
+  const now = new Date();
+  const isResultsReleased =
+    exam.type === 'practice' ||
+    !exam.ends_at ||
+    now.getTime() >= new Date(exam.ends_at).getTime() ||
+    exam.status === 'completed';
+
+  const rawResultQuestions = result.result_data?.questions || [];
+
+  if (!isResultsReleased) {
+    return (
+      <PendingResultView
+        examTitle={exam.title}
+        examSubject={exam.subject || 'Examination'}
+        submittedAt={result.computed_at}
+        endsAt={exam.ends_at!}
+        totalQuestions={rawResultQuestions.length || exam.total_questions || 0}
+        serverTime={now.toISOString()}
+      />
+    );
+  }
+
+  // 5. If Results are Released: Fetch Leaderboard Top Results and Submission Count in Parallel
+  const [topResultsRes, countRes] = await Promise.all([
     supabaseAdmin
       .from('exam_results')
       .select('student_id, total_score, percentage')
@@ -72,11 +105,6 @@ export default async function ResultPage({ params }: { params: Promise<{ session
       .select('*', { count: 'exact', head: true })
       .eq('exam_id', result.exam_id),
   ]);
-
-  const exam = examRes.data;
-  if (!exam) {
-    notFound();
-  }
 
   const topResults = topResultsRes.data;
   const totalSubmissions = countRes.count;
@@ -156,7 +184,6 @@ export default async function ResultPage({ params }: { params: Promise<{ session
     totalSubmissions
   };
 
-  const rawResultQuestions = result.result_data?.questions || [];
   const resultQuestionIds = rawResultQuestions.map((q: any) => q.question_id).filter(Boolean);
 
   const questionImgMap = new Map<string, { content_image_url: string | null; explanation_image_url: string | null }>();

@@ -111,12 +111,23 @@ export async function GET() {
     const studentIds = batchStudents.map(s => s.user_id);
     const { data: usersData } = studentIds.length > 0 ? await supabaseAdmin.from('users').select('id, email').in('id', studentIds) : { data: [] };
     const emailMap = new Map((usersData || []).map(u => [u.id, u.email]));
-    const { data: allResults } = await supabaseAdmin.from('exam_results').select('student_id, exam_id, percentage, exams(type)').in('student_id', studentIds);
+    const { data: allResults } = await supabaseAdmin
+      .from('exam_results')
+      .select('student_id, exam_id, percentage, exams(type, ends_at, status)')
+      .in('student_id', studentIds);
+
+    const now = new Date();
 
     const studentScores = batchStudents.map(student => {
       const studentResults = (allResults || []).filter((r: any) => r.student_id === student.user_id);
       const practiceResults = studentResults.filter((r: any) => (Array.isArray(r.exams) ? r.exams[0] : r.exams)?.type === 'practice');
-      const examResults = studentResults.filter((r: any) => (Array.isArray(r.exams) ? r.exams[0] : r.exams)?.type === 'scheduled');
+      const examResults = studentResults.filter((r: any) => {
+        const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
+        if (ex?.type !== 'scheduled') return false;
+        if (ex?.status === 'completed') return true;
+        if (ex?.ends_at && now >= new Date(ex.ends_at)) return true;
+        return false;
+      });
       const practiceAvg = practiceResults.length > 0 ? practiceResults.reduce((s, r) => s + Number(r.percentage), 0) / practiceResults.length : 0;
       const examAvg = examResults.length > 0 ? examResults.reduce((s, r) => s + Number(r.percentage), 0) / examResults.length : 0;
       const totalScore = practiceResults.length + examResults.length === 0 ? 0 : examResults.length > 0 ? (practiceAvg * 0.3) + (examAvg * 0.7) : practiceAvg * 0.3;
