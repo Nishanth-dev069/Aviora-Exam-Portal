@@ -2,7 +2,21 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Search, MoreHorizontal, ShieldAlert, CheckCircle2, XCircle, Loader2, ChevronUp, ChevronDown, ChevronsUpDown, Shield, BarChart2, Clock } from 'lucide-react';
+import {
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  Shield,
+  Clock,
+  RotateCcw,
+  ShieldCheck
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { parseISO } from 'date-fns';
@@ -61,7 +75,7 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
 
-  // Always fetch fresh exams on mount to prevent Next.js App Router stale caching
+  // Always fetch fresh exams on mount to prevent stale caching
   useEffect(() => {
     let cancelled = false;
     const fetchExams = async () => {
@@ -82,7 +96,7 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
     };
     fetchExams();
     return () => { cancelled = true; };
-  }, []);
+  }, [selectedExamId]);
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField>('full_name');
@@ -92,12 +106,25 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [countdown, setCountdown] = useState(30);
 
-  // Action / Confirmation Modal State
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Modals state
   const [terminateModalSession, setTerminateModalSession] = useState<{ sessionId: string, studentName: string, lastSyncedText: string } | null>(null);
   const [isTerminating, setIsTerminating] = useState(false);
+  
   const [forceSubmitTarget, setForceSubmitTarget] = useState<{ id: string, name: string } | null>(null);
   const [isSubmittingForce, setIsSubmittingForce] = useState(false);
+
+  // Restore Modal State
+  const [restoreModalSession, setRestoreModalSession] = useState<{
+    sessionId: string;
+    studentName: string;
+    status: string;
+    violations: number;
+  } | null>(null);
+  const [extraMinutes, setExtraMinutes] = useState<number>(30);
+  const [customMinutes, setCustomMinutes] = useState<string>('');
+  const [resetViolations, setResetViolations] = useState<boolean>(true);
+  const [restoreReason, setRestoreReason] = useState<string>('Accidental submission recovery');
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
   
   // Security Events Modal State
   const [securityEventsModal, setSecurityEventsModal] = useState<{ sessionId: string, studentName: string } | null>(null);
@@ -157,13 +184,6 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
     });
   }, 1000);
 
-  // Close open dropdown when clicking outside
-  useEffect(() => {
-    const closeMenu = () => setOpenMenuId(null);
-    document.addEventListener('click', closeMenu);
-    return () => document.removeEventListener('click', closeMenu);
-  }, []);
-
   const confirmTerminate = async () => {
     if (!terminateModalSession || !selectedExamId) return;
     setIsTerminating(true);
@@ -207,6 +227,36 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
     } finally {
       setIsSubmittingForce(false);
       setForceSubmitTarget(null);
+    }
+  };
+
+  const handleRestoreConfirm = async () => {
+    if (!restoreModalSession) return;
+    setIsRestoring(true);
+    setActionMessage(null);
+    try {
+      const minutesToGrant = customMinutes ? parseInt(customMinutes, 10) : extraMinutes;
+      const res = await fetch(`/api/admin/sessions/${restoreModalSession.sessionId}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          extra_minutes: isNaN(minutesToGrant) || minutesToGrant < 1 ? 30 : minutesToGrant,
+          reset_violations: resetViolations,
+          reason: restoreReason
+        })
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setActionMessage({ type: 'success', text: `Successfully restored exam session for ${restoreModalSession.studentName}.` });
+        fetchMonitoringData();
+      } else {
+        setActionMessage({ type: 'error', text: json.error?.message || json.error || 'Failed to restore exam session.' });
+      }
+    } catch {
+      setActionMessage({ type: 'error', text: 'Network error. Could not restore session.' });
+    } finally {
+      setIsRestoring(false);
+      setRestoreModalSession(null);
     }
   };
 
@@ -332,8 +382,17 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
     <div className="space-y-6">
       
       {actionMessage && (
-        <div className={cn("p-4 rounded-xl border text-sm font-bold flex items-center gap-2", actionMessage.type === 'success' ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-red-50 border-red-200 text-red-700")}>
-          {actionMessage.text}
+        <div className={cn("p-4 rounded-xl border text-sm font-bold flex items-center justify-between gap-2", actionMessage.type === 'success' ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-red-50 border-red-200 text-red-700")}>
+          <div className="flex items-center gap-2">
+            {actionMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-red-600" />}
+            <span>{actionMessage.text}</span>
+          </div>
+          <button 
+            onClick={() => setActionMessage(null)}
+            className="text-xs opacity-70 hover:opacity-100 font-bold px-2 py-0.5 rounded"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -424,6 +483,7 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
                 <SortableHeader field="started_at" label="Started" />
                 <SortableHeader field="submitted_at" label="Submitted" />
                 <SortableHeader field="last_synced_at" label="Last Sync" />
+                <th className="px-6 py-4 font-bold text-right text-xs uppercase tracking-wider text-text-secondary">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -437,11 +497,12 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
                     <td className="px-6 py-4"><Skeleton className="h-4 w-16 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
+                    <td className="px-6 py-4 text-right"><Skeleton className="h-6 w-8 rounded ml-auto" /></td>
                   </tr>
                 ))
               ) : sortedStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-text-muted font-medium">
+                  <td colSpan={8} className="px-6 py-12 text-center text-text-muted font-medium">
                     No student sessions match your query.
                   </td>
                 </tr>
@@ -475,6 +536,35 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
                       <td className="px-6 py-4 text-xs text-text-secondary font-medium">
                         {getSyncText(row.last_synced_at, row.status)}
                       </td>
+                      <td className="px-6 py-4 text-right">
+                        {row.session_id ? (
+                          <SessionActionsMenu
+                            session={{
+                              session_id: row.session_id,
+                              student_name: row.full_name,
+                              roll_number: row.roll_number,
+                              status: row.status || 'in_progress',
+                              security_violations: row.security_violations || 0
+                            }}
+                            onForceSubmit={(sessionId, studentName) => {
+                              setForceSubmitTarget({ id: sessionId, name: studentName });
+                            }}
+                            onRestoreSession={(sessionId, studentName, status, violations) => {
+                              setRestoreModalSession({ sessionId, studentName, status, violations });
+                              setExtraMinutes(30);
+                              setCustomMinutes('');
+                              setResetViolations(true);
+                              setRestoreReason('Accidental submission recovery');
+                            }}
+                            onViewDetails={(sessionId, studentName) => {
+                              openSecurityEvents(sessionId, studentName);
+                            }}
+                            onSendWarning={handleSendWarning}
+                          />
+                        ) : (
+                          <span className="text-text-muted text-xs">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -483,6 +573,117 @@ export default function ExamStatusBoard({ activeExams }: { activeExams: { id: st
           </table>
         </div>
       </div>
+
+      {/* Restore Session Modal */}
+      {restoreModalSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
+          <div className="bg-surface border border-border shadow-2xl rounded-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-emerald-600 mb-4">
+              <RotateCcw className="w-6 h-6 shrink-0" />
+              <h3 className="text-lg font-bold text-text-primary">Restore Exam Session</h3>
+            </div>
+
+            <p className="text-sm text-text-secondary mb-4">
+              Allow <strong className="text-text-primary">{restoreModalSession.studentName}</strong> to resume their exam session.
+            </p>
+
+            <div className="space-y-4 mb-6">
+              {/* Extra Time Duration Selector */}
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase mb-2">
+                  Extra Time to Grant from Now
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[15, 30, 45, 60].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => {
+                        setExtraMinutes(mins);
+                        setCustomMinutes('');
+                      }}
+                      className={cn(
+                        "py-2 px-3 rounded-lg font-bold text-xs border transition-all",
+                        extraMinutes === mins && !customMinutes
+                          ? "bg-primary text-white border-primary"
+                          : "bg-surface-2 hover:bg-surface-3 text-text-primary border-border"
+                      )}
+                    >
+                      +{mins}m
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <span className="text-xs text-text-muted font-medium">Or custom:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="180"
+                    placeholder="e.g. 20"
+                    value={customMinutes}
+                    onChange={(e) => setCustomMinutes(e.target.value)}
+                    className="w-20 px-3 py-1 bg-background border border-border rounded-lg text-xs font-semibold text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                  <span className="text-xs text-text-muted font-medium">minutes</span>
+                </div>
+              </div>
+
+              {/* Reset Violations Checkbox */}
+              <label className="flex items-start gap-3 p-3 bg-surface-2 rounded-xl cursor-pointer hover:bg-surface-3 transition-colors border border-border">
+                <input
+                  type="checkbox"
+                  checked={resetViolations}
+                  onChange={(e) => setResetViolations(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <div>
+                  <div className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    Reset Anti-Cheat Violations Counter
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    Clears security strikes so student can resume without immediate lockout.
+                  </p>
+                </div>
+              </label>
+
+              {/* Reason */}
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">
+                  Audit Reason (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={restoreReason}
+                  onChange={(e) => setRestoreReason(e.target.value)}
+                  placeholder="e.g., Accidental submission"
+                  className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-xs font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => setRestoreModalSession(null)}
+                disabled={isRestoring}
+                className="px-4 py-2 text-text-secondary hover:text-text-primary font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleRestoreConfirm}
+                disabled={isRestoring}
+                className="px-5 py-2 bg-emerald-600 text-white font-bold text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isRestoring && <Loader2 className="w-4 h-4 animate-spin" />}
+                Confirm & Restore
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Terminate Exam Confirmation Modal */}
       {terminateModalSession && (

@@ -183,7 +183,7 @@ export async function POST(request: Request) {
     const submittedSessions = (existingSessions || []).filter((s: any) => s.status === 'submitted');
 
     if (activeSession) {
-      // Compute capped expires_at for recovered active session
+      // Compute capped expires_at for recovered active session without overriding admin-granted extensions
       const startedAtDate = new Date(activeSession.started_at);
       const computedExpiresAt = computeExpiresAt(
         startedAtDate,
@@ -191,9 +191,10 @@ export async function POST(request: Request) {
         exam.type,
         exam.ends_at ?? null
       );
-      const computedExpiresIso = computedExpiresAt.toISOString();
 
-      if (activeSession.expires_at !== computedExpiresIso) {
+      // Only adjust if no expires_at exists or if computed is strictly more generous (preserve admin extensions)
+      if (!activeSession.expires_at) {
+        const computedExpiresIso = computedExpiresAt.toISOString();
         await supabaseAdmin
           .from('exam_sessions')
           .update({ expires_at: computedExpiresIso })
@@ -250,6 +251,12 @@ export async function POST(request: Request) {
         })
       );
 
+      // Fetch saved answers for this session to restore student progress
+      const { data: savedAnswers } = await supabaseAdmin
+        .from('student_answers')
+        .select('question_id, selected_option_id, is_marked_for_review, is_visited, time_spent_seconds, updated_at')
+        .eq('session_id', activeSession.id);
+
       // Fetch student profile for exam header display
       const { data: studentProfile } = await supabaseAdmin
         .from('student_profiles')
@@ -284,6 +291,7 @@ export async function POST(request: Request) {
           settings: exam.settings
         },
         questions: recoveredQuestions,
+        saved_answers: savedAnswers || [],
         student_identity: studentIdentity,
         server_time: new Date().toISOString()
       });

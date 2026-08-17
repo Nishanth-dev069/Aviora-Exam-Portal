@@ -85,17 +85,21 @@ export default function StartExamClient({ examId }: { examId: string }) {
       }));
       await db.questions.bulkPut(localQuestions);
 
-      // 3. Write default answers
-      const localAnswers = data.questions.map((q: any) => ({
-        question_id: q.id,
-        session_id: data.session.id,
-        selected_option_id: null,
-        is_marked_for_review: false,
-        is_visited: false,
-        time_spent_seconds: 0,
-        updated_at: new Date().toISOString(),
-        sync_status: 'synced' // Initial state is naturally synced
-      }));
+      // 3. Write answers (hydrating from saved answers if session is being resumed)
+      const savedMap = new Map<string, any>((data.saved_answers || []).map((sa: any) => [sa.question_id, sa]));
+      const localAnswers = data.questions.map((q: any) => {
+        const saved = savedMap.get(q.id);
+        return {
+          question_id: q.id,
+          session_id: data.session.id,
+          selected_option_id: saved?.selected_option_id || null,
+          is_marked_for_review: Boolean(saved?.is_marked_for_review),
+          is_visited: Boolean(saved?.is_visited),
+          time_spent_seconds: saved?.time_spent_seconds || 0,
+          updated_at: saved?.updated_at || new Date().toISOString(),
+          sync_status: 'synced'
+        };
+      });
       await db.answers.bulkPut(localAnswers);
       
       // Request Fullscreen

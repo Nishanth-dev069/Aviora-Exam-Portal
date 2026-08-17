@@ -46,9 +46,9 @@ export default async function StudentResultsPage() {
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) + 
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) + 
            ' at ' + 
-           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+           d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
   };
 
   return (
@@ -117,7 +117,7 @@ export default async function StudentResultsPage() {
                         {isPending ? (
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-text-muted italic">Pending Release</span>
-                            <span className="text-[11px] text-text-muted">Releases at {exam?.ends_at ? new Date(exam.ends_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'exam end'}</span>
+                            <span className="text-[11px] text-text-muted">Releases at {exam?.ends_at ? new Date(exam.ends_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : 'exam end'}</span>
                           </div>
                         ) : (
                           <div className="flex flex-col">

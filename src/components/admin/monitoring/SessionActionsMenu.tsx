@@ -2,38 +2,47 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { MoreVertical, LogOut, Eye, AlertTriangle } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, AlertTriangle, RotateCcw } from 'lucide-react';
 
-interface SessionRow {
+export interface SessionActionRow {
   session_id: string;
   student_name: string;
   roll_number: string;
   status: string;
+  security_violations?: number;
 }
 
 interface Props {
-  session: SessionRow;
+  session: SessionActionRow;
   onForceSubmit: (sessionId: string, studentName: string) => void;
-  onViewDetails: (sessionId: string) => void;
-  onSendWarning: (sessionId: string) => void;
+  onRestoreSession?: (sessionId: string, studentName: string, status: string, violations: number) => void;
+  onViewDetails: (sessionId: string, studentName: string) => void;
+  onSendWarning?: (sessionId: string) => void;
 }
 
-export function SessionActionsMenu({ session, onForceSubmit, onViewDetails, onSendWarning }: Props) {
+export function SessionActionsMenu({
+  session,
+  onForceSubmit,
+  onRestoreSession,
+  onViewDetails,
+  onSendWarning
+}: Props) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const handleOpen = () => {
+  const handleOpen = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
-    const menuHeight = 150;
+    const menuHeight = 160;
     const top = spaceBelow < menuHeight
       ? Math.max(10, rect.top - menuHeight)
       : rect.bottom + 4;
-    setMenuPos({ top, right: window.innerWidth - rect.right });
-    setOpen(true);
+    setMenuPos({ top, right: Math.max(10, window.innerWidth - rect.right) });
+    setOpen(prev => !prev);
   };
 
   useEffect(() => {
@@ -48,10 +57,14 @@ export function SessionActionsMenu({ session, onForceSubmit, onViewDetails, onSe
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const act = (fn: () => void) => { setOpen(false); fn(); };
+  const act = (fn: () => void) => {
+    setOpen(false);
+    fn();
+  };
 
-  // Only show warning & force submit actions for sessions that are in progress / active / disconnected
-  const isActive = session.status === 'In Progress' || session.status === 'in_progress' || session.status === 'active' || session.status === 'Disconnected';
+  const normStatus = (session.status || '').toLowerCase().replace(/\s+/g, '_');
+  const isActive = normStatus === 'in_progress' || normStatus === 'active' || normStatus === 'disconnected';
+  const isRestorable = normStatus === 'submitted' || normStatus === 'expired' || normStatus === 'terminated';
 
   return (
     <>
@@ -67,24 +80,44 @@ export function SessionActionsMenu({ session, onForceSubmit, onViewDetails, onSe
       {open && typeof window !== 'undefined' && createPortal(
         <div
           ref={menuRef}
-          onMouseLeave={() => setOpen(false)}
+          onClick={(e) => e.stopPropagation()}
           style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
           className="w-52 rounded-xl border border-border bg-surface shadow-xl py-1 text-sm text-text-primary animate-in fade-in zoom-in-95 duration-100"
         >
           <button
-            onClick={() => act(() => onViewDetails(session.session_id))}
+            onClick={() => act(() => onViewDetails(session.session_id, session.student_name))}
             className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left font-medium hover:bg-surface-2 transition-colors"
           >
             <Eye className="h-4 w-4 text-text-muted" /> View Details
           </button>
+
+          {isRestorable && onRestoreSession && (
+            <>
+              <div className="my-1 border-t border-border" />
+              <button
+                onClick={() => act(() => onRestoreSession(
+                  session.session_id,
+                  session.student_name,
+                  session.status,
+                  session.security_violations || 0
+                ))}
+                className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left font-medium hover:bg-emerald-50 text-emerald-600 transition-colors"
+              >
+                <RotateCcw className="h-4 w-4 text-emerald-600" /> Restore Session
+              </button>
+            </>
+          )}
+
           {isActive && (
             <>
-              <button
-                onClick={() => act(() => onSendWarning(session.session_id))}
-                className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left font-medium hover:bg-surface-2 transition-colors"
-              >
-                <AlertTriangle className="h-4 w-4 text-amber-500" /> Log Warning
-              </button>
+              {onSendWarning && (
+                <button
+                  onClick={() => act(() => onSendWarning(session.session_id))}
+                  className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left font-medium hover:bg-surface-2 transition-colors"
+                >
+                  <AlertTriangle className="h-4 w-4 text-amber-500" /> Log Warning
+                </button>
+              )}
               <div className="my-1 border-t border-border" />
               <button
                 onClick={() => act(() => onForceSubmit(session.session_id, session.student_name))}

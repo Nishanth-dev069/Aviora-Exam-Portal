@@ -104,7 +104,7 @@ export async function GET() {
     });
 
     const now = new Date();
-    (rawScheduled || scheduledExams || []).forEach((exam: any) => {
+    (scheduledExams || []).forEach((exam: any) => {
       const statusEntry = examStatusMap[exam.id];
       if (statusEntry && exam.ends_at && now < new Date(exam.ends_at) && exam.status !== 'completed') {
         examStatusMap[exam.id] = {
@@ -116,7 +116,7 @@ export async function GET() {
 
     return NextResponse.json({
       practiceExams: practiceExams || [],
-      scheduledExams: scheduledExams || rawScheduled || [],
+      scheduledExams: scheduledExams || [],
       examStatusMap,
     });
 
