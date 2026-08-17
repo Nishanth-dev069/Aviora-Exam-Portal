@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Archive, ChevronLeft, ChevronRight, X, Loader2, Folder, Edit } from 'lucide-react';
+import { Search, Plus, Archive, ChevronLeft, ChevronRight, X, Loader2, Folder, Edit, Globe, Lock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,29 +9,58 @@ import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/Skeleton';
 
-const createBankSchema = z.object({
+const bankFormSchema = z.object({
   name: z.string().min(1, 'Bank name is required'),
   subject: z.string().min(1, 'Subject is required'),
+  is_public: z.boolean(),
   chapter: z.string().max(200).optional(),
-  chapter_order: z.number().int().min(0, 'Must be 0 or greater').max(999).optional(),
+  chapter_order: z.number().int().min(1, 'Chapter number must be 1 or greater').max(999).optional(),
+}).superRefine((val, ctx) => {
+  if (val.is_public) {
+    if (!val.chapter || !val.chapter.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Chapter name is required for public question banks',
+        path: ['chapter'],
+      });
+    }
+    if (!val.chapter_order || val.chapter_order < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Chapter number must be 1 or greater',
+        path: ['chapter_order'],
+      });
+    }
+  }
 });
-type BankFormData = z.infer<typeof createBankSchema>;
+
+type BankFormData = {
+  name: string;
+  subject: string;
+  is_public: boolean;
+  chapter?: string;
+  chapter_order?: number;
+};
+
 
 function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null);
-  const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
-    resolver: zodResolver(createBankSchema),
+  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
+    resolver: zodResolver(bankFormSchema),
     defaultValues: {
       name: '',
       subject: '',
+      is_public: false,
       chapter: '',
-      chapter_order: 0,
+      chapter_order: 1,
     }
   });
 
+  const isPublic = watch('is_public');
+
   useEffect(() => { 
     if (isOpen) { 
-      reset({ name: '', subject: '', chapter: '', chapter_order: 0 }); 
+      reset({ name: '', subject: '', is_public: false, chapter: '', chapter_order: 1 }); 
       setServerError(null); 
     } 
   }, [isOpen, reset]);
@@ -42,10 +71,10 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
     setServerError(null);
     try {
       const payload = {
-        name: data.name,
-        subject: data.subject,
-        chapter: data.chapter?.trim() || null,
-        chapter_order: typeof data.chapter_order === 'number' && !isNaN(data.chapter_order) ? data.chapter_order : 0,
+        name: data.name.trim(),
+        subject: data.subject.trim(),
+        chapter: data.is_public && data.chapter?.trim() ? data.chapter.trim() : null,
+        chapter_order: data.is_public ? (Number(data.chapter_order) || 1) : 0,
       };
       const res = await fetch('/api/admin/question-banks', {
         method: 'POST',
@@ -66,7 +95,7 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
-      <div className="bg-surface border border-border shadow-2xl rounded-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-surface border border-border shadow-2xl rounded-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-bold text-text-primary">New Question Bank</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
@@ -75,7 +104,7 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
           {serverError && <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm font-medium">{serverError}</div>}
           
           <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Bank Name *</label>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Bank Name <span className="text-danger">*</span></label>
             <input 
               {...register('name')}
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.name ? "border-danger" : "border-border")}
@@ -85,7 +114,7 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Subject *</label>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Subject <span className="text-danger">*</span></label>
             <input 
               {...register('subject')}
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.subject ? "border-danger" : "border-border")}
@@ -94,31 +123,80 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
             {errors.subject && <p className="text-xs text-danger mt-1">{errors.subject.message}</p>}
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Name (Learning Section)</label>
-            <input 
-              {...register('chapter')}
-              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter ? "border-danger" : "border-border")}
-              placeholder="e.g. ICAO Standards & Annexes"
-            />
-            <p className="text-xs text-text-muted mt-1">Leave empty to hide this bank from students&apos; Study section.</p>
-            {errors.chapter && <p className="text-xs text-danger mt-1">{errors.chapter.message}</p>}
+          {/* Public / Private Toggle */}
+          <div className="pt-2 border-t border-border">
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-2 border border-border">
+              <div className="space-y-0.5 pr-3">
+                <div className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                  {isPublic ? <Globe className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-text-muted" />}
+                  <span>Public Question Bank</span>
+                  <span className={cn(
+                    "text-[10px] uppercase font-black px-1.5 py-0.5 rounded",
+                    isPublic ? "bg-success/15 text-success border border-success/30" : "bg-text-muted/15 text-text-muted border border-border"
+                  )}>
+                    {isPublic ? 'Public' : 'Private'}
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  {isPublic
+                    ? 'Publish to students in the Learn section.'
+                    : 'Private (exam-only). Hidden from student practice.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isPublic}
+                onClick={() => setValue('is_public', !isPublic, { shouldValidate: true })}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                  isPublic ? "bg-primary" : "bg-surface-3 border-border"
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out",
+                    isPublic ? "translate-x-5" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Order</label>
-            <input 
-              type="number"
-              min={0}
-              step={1}
-              {...register('chapter_order', { valueAsNumber: true })}
-              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter_order ? "border-danger" : "border-border")}
-            />
-            <p className="text-xs text-text-muted mt-1">Controls display order within the subject (1 = first).</p>
-            {errors.chapter_order && <p className="text-xs text-danger mt-1">{errors.chapter_order.message}</p>}
-          </div>
+          {/* Conditional Chapter Fields */}
+          {isPublic && (
+            <div className="space-y-4 p-4 rounded-xl bg-primary/[0.03] border border-primary/20 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div>
+                <label className="block text-sm font-bold text-text-secondary mb-1">
+                  Chapter Name <span className="text-danger">*</span>
+                </label>
+                <input 
+                  {...register('chapter')}
+                  className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter ? "border-danger" : "border-border")}
+                  placeholder="e.g. ICAO Standards & Annexes"
+                />
+                {errors.chapter && <p className="text-xs text-danger mt-1 font-medium">{errors.chapter.message}</p>}
+              </div>
 
-          <div className="pt-4 flex justify-end gap-3">
+              <div>
+                <label className="block text-sm font-bold text-text-secondary mb-1">
+                  Chapter Number / Order <span className="text-danger">*</span>
+                </label>
+                <input 
+                  type="number"
+                  min={1}
+                  step={1}
+                  {...register('chapter_order', { valueAsNumber: true })}
+                  className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter_order ? "border-danger" : "border-border")}
+                  placeholder="1"
+                />
+                <p className="text-xs text-text-muted mt-1">Controls the sequence order in student Learn list (1 = first chapter).</p>
+                {errors.chapter_order && <p className="text-xs text-danger mt-1 font-medium">{errors.chapter_order.message}</p>}
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 flex justify-end gap-3 border-t border-border">
             <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-text-secondary hover:text-text-primary font-medium">Cancel</button>
             <button type="submit" disabled={isSubmitting} className="px-6 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2">
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />} Create Bank
@@ -142,17 +220,21 @@ export type QuestionBankType = {
 
 function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBankType | null, isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null);
-  const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
-    resolver: zodResolver(createBankSchema)
+  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
+    resolver: zodResolver(bankFormSchema)
   });
+
+  const isPublic = watch('is_public');
 
   useEffect(() => { 
     if (isOpen && bank) { 
+      const isBankPublic = Boolean(bank.chapter && bank.chapter.trim());
       reset({ 
         name: bank.name, 
         subject: bank.subject,
+        is_public: isBankPublic,
         chapter: bank.chapter ?? '',
-        chapter_order: bank.chapter_order ?? 0,
+        chapter_order: bank.chapter_order && bank.chapter_order > 0 ? bank.chapter_order : 1,
       }); 
       setServerError(null); 
     } 
@@ -165,10 +247,10 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
     try {
       const payload = {
         id: bank.id,
-        name: data.name,
-        subject: data.subject,
-        chapter: data.chapter?.trim() || null,
-        chapter_order: typeof data.chapter_order === 'number' && !isNaN(data.chapter_order) ? data.chapter_order : 0,
+        name: data.name.trim(),
+        subject: data.subject.trim(),
+        chapter: data.is_public && data.chapter?.trim() ? data.chapter.trim() : null,
+        chapter_order: data.is_public ? (Number(data.chapter_order) || 1) : 0,
       };
       const res = await fetch('/api/admin/question-banks', {
         method: 'PATCH',
@@ -189,7 +271,7 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
-      <div className="bg-surface border border-border shadow-2xl rounded-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-surface border border-border shadow-2xl rounded-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-bold text-text-primary">Edit Question Bank</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
@@ -198,7 +280,7 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
           {serverError && <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm font-medium">{serverError}</div>}
           
           <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Bank Name *</label>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Bank Name <span className="text-danger">*</span></label>
             <input 
               {...register('name')}
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.name ? "border-danger" : "border-border")}
@@ -207,7 +289,7 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Subject *</label>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Subject <span className="text-danger">*</span></label>
             <input 
               {...register('subject')}
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.subject ? "border-danger" : "border-border")}
@@ -215,31 +297,80 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
             {errors.subject && <p className="text-xs text-danger mt-1">{errors.subject.message}</p>}
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Name (Learning Section)</label>
-            <input 
-              {...register('chapter')}
-              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter ? "border-danger" : "border-border")}
-              placeholder="e.g. ICAO Standards & Annexes"
-            />
-            <p className="text-xs text-text-muted mt-1">Leave empty to hide this bank from students&apos; Study section.</p>
-            {errors.chapter && <p className="text-xs text-danger mt-1">{errors.chapter.message}</p>}
+          {/* Public / Private Toggle */}
+          <div className="pt-2 border-t border-border">
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-2 border border-border">
+              <div className="space-y-0.5 pr-3">
+                <div className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                  {isPublic ? <Globe className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-text-muted" />}
+                  <span>Public Question Bank</span>
+                  <span className={cn(
+                    "text-[10px] uppercase font-black px-1.5 py-0.5 rounded",
+                    isPublic ? "bg-success/15 text-success border border-success/30" : "bg-text-muted/15 text-text-muted border border-border"
+                  )}>
+                    {isPublic ? 'Public' : 'Private'}
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  {isPublic
+                    ? 'Publish to students in the Learn section.'
+                    : 'Private (exam-only). Hidden from student practice.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isPublic}
+                onClick={() => setValue('is_public', !isPublic, { shouldValidate: true })}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                  isPublic ? "bg-primary" : "bg-surface-3 border-border"
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out",
+                    isPublic ? "translate-x-5" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Order</label>
-            <input 
-              type="number"
-              min={0}
-              step={1}
-              {...register('chapter_order', { valueAsNumber: true })}
-              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter_order ? "border-danger" : "border-border")}
-            />
-            <p className="text-xs text-text-muted mt-1">Controls display order within the subject (1 = first).</p>
-            {errors.chapter_order && <p className="text-xs text-danger mt-1">{errors.chapter_order.message}</p>}
-          </div>
+          {/* Conditional Chapter Fields */}
+          {isPublic && (
+            <div className="space-y-4 p-4 rounded-xl bg-primary/[0.03] border border-primary/20 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div>
+                <label className="block text-sm font-bold text-text-secondary mb-1">
+                  Chapter Name <span className="text-danger">*</span>
+                </label>
+                <input 
+                  {...register('chapter')}
+                  className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter ? "border-danger" : "border-border")}
+                  placeholder="e.g. ICAO Standards & Annexes"
+                />
+                {errors.chapter && <p className="text-xs text-danger mt-1 font-medium">{errors.chapter.message}</p>}
+              </div>
 
-          <div className="pt-4 flex justify-end gap-3">
+              <div>
+                <label className="block text-sm font-bold text-text-secondary mb-1">
+                  Chapter Number / Order <span className="text-danger">*</span>
+                </label>
+                <input 
+                  type="number"
+                  min={1}
+                  step={1}
+                  {...register('chapter_order', { valueAsNumber: true })}
+                  className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter_order ? "border-danger" : "border-border")}
+                  placeholder="1"
+                />
+                <p className="text-xs text-text-muted mt-1">Controls the sequence order in student Learn list (1 = first chapter).</p>
+                {errors.chapter_order && <p className="text-xs text-danger mt-1 font-medium">{errors.chapter_order.message}</p>}
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 flex justify-end gap-3 border-t border-border">
             <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-text-secondary hover:text-text-primary font-medium">Cancel</button>
             <button type="submit" disabled={isSubmitting} className="px-6 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2">
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />} Save Changes
@@ -378,25 +509,24 @@ export default function QuestionBankList() {
                     <button 
                       onClick={(e) => { e.stopPropagation(); setBankToEdit(bank); }}
                       title="Edit Bank"
-                      className="p-2 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                      className="p-1.5 text-text-muted hover:text-primary hover:bg-surface-2 rounded-lg transition-colors"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={(e) => handleArchive(e, bank.id, bank.name)}
                       title="Archive Bank"
-                      className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                      className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
                     >
                       <Archive className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
-              ))
-            )}
-              {banks.length === 0 && !isLoading && (
+              )))}
+              {!isLoading && banks.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-text-muted">
-                    No question banks found.
+                    No question banks found. Click &quot;New Question Bank&quot; to create one.
                   </td>
                 </tr>
               )}
@@ -404,32 +534,43 @@ export default function QuestionBankList() {
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        <div className="mt-auto border-t border-border px-6 py-4 flex items-center justify-between bg-surface">
-          <div className="text-sm font-medium text-text-secondary">
-            Showing <span className="text-text-primary font-bold">{Math.min((page - 1) * pageSize + 1, totalCount)}</span> to <span className="text-text-primary font-bold">{Math.min(page * pageSize, totalCount)}</span> of <span className="text-text-primary font-bold">{totalCount}</span> results
-          </div>
+        {/* Pagination footer */}
+        <div className="p-4 border-t border-border flex items-center justify-between text-sm text-text-secondary mt-auto">
+          <span>Total: {totalCount} banks</span>
           <div className="flex items-center gap-2">
             <button 
-              disabled={page === 1}
-              onClick={() => setPage(prev => Math.max(1, prev - 1))}
-              className="p-2 border border-border rounded-lg bg-background text-text-secondary hover:bg-surface-2 disabled:opacity-50 transition-colors"
+              disabled={page <= 1} 
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="p-1.5 border border-border rounded-lg hover:bg-surface-2 disabled:opacity-50"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
+            <span>Page {page} of {totalPages || 1}</span>
             <button 
-              disabled={page >= totalPages}
-              onClick={() => setPage(prev => prev + 1)}
-              className="p-2 border border-border rounded-lg bg-background text-text-secondary hover:bg-surface-2 disabled:opacity-50 transition-colors"
+              disabled={page >= totalPages} 
+              onClick={() => setPage(p => p + 1)}
+              className="p-1.5 border border-border rounded-lg hover:bg-surface-2 disabled:opacity-50"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
+
       </div>
 
-      <CreateBankModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSuccess={fetchBanks} />
-      <EditBankModal isOpen={!!bankToEdit} bank={bankToEdit} onClose={() => setBankToEdit(null)} onSuccess={() => { setBankToEdit(null); fetchBanks(); }} />
+      <CreateBankModal 
+        isOpen={isCreateOpen} 
+        onClose={() => setIsCreateOpen(false)} 
+        onSuccess={fetchBanks} 
+      />
+
+      <EditBankModal 
+        bank={bankToEdit} 
+        isOpen={!!bankToEdit} 
+        onClose={() => setBankToEdit(null)} 
+        onSuccess={fetchBanks} 
+      />
+
     </div>
   );
 }

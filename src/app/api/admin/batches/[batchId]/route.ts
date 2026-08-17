@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
@@ -28,13 +30,15 @@ async function verifyAdmin() {
   return { user };
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ batchId: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: { batchId: string } | Promise<{ batchId: string }> }) {
   const auth = await verifyAdmin();
   if (auth.error) {
     return NextResponse.json({ error: { code: auth.error } }, { status: auth.status });
   }
 
-  const { batchId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const batchId = resolvedParams.batchId;
+
 
   // Validate UUID format before querying
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
@@ -41,10 +43,11 @@ async function getAdminClient() {
 // POST: Upload an image for a question (content or explanation)
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ questionId: string }> }
+  { params }: { params: { questionId: string } | Promise<{ questionId: string }> }
 ) {
   try {
-    const { questionId } = await params;
+    const { questionId } = await Promise.resolve(params);
+
     const auth = await getAdminClient();
     if (auth.error) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
@@ -138,10 +141,11 @@ export async function POST(
 // DELETE: Remove a question image (content or explanation)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ questionId: string }> }
+  { params }: { params: { questionId: string } | Promise<{ questionId: string }> }
 ) {
   try {
-    const { questionId } = await params;
+    const { questionId } = await Promise.resolve(params);
+
     const auth = await getAdminClient();
     if (auth.error) {
       return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });

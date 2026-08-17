@@ -7,10 +7,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ sessionId: string }> }
+  { params }: { params: { sessionId: string } | Promise<{ sessionId: string }> }
 ) {
   try {
-    const { sessionId } = await params;
+    const { sessionId } = await Promise.resolve(params);
     const cookieStore = await cookies();
     const supabaseAnon = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

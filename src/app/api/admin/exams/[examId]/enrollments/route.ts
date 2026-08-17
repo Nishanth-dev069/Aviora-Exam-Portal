@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
@@ -30,14 +32,16 @@ async function verifyAdmin() {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ examId: string }> }
+  { params }: { params: { examId: string } | Promise<{ examId: string }> }
 ) {
   const auth = await verifyAdmin();
   if (auth.error) {
     return NextResponse.json({ error: { code: auth.error } }, { status: auth.status });
   }
 
-  const { examId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const examId = resolvedParams.examId;
+
 
   const { data: enrollments, error } = await supabaseAdmin
     .from('exam_enrollments')
@@ -76,14 +80,16 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ examId: string }> }
+  { params }: { params: { examId: string } | Promise<{ examId: string }> }
 ) {
   const auth = await verifyAdmin();
   if (auth.error) {
     return NextResponse.json({ error: { code: auth.error } }, { status: auth.status });
   }
 
-  const { examId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const examId = resolvedParams.examId;
+
 
   const user = auth.user!;
   const adminRole = auth.adminRole!;

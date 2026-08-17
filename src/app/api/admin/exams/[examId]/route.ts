@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
@@ -28,11 +30,13 @@ async function verifyAdmin() {
   return { user, supabaseAdmin };
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ examId: string }> }) {
+export async function GET(request: Request, { params }: { params: { examId: string } | Promise<{ examId: string }> }) {
   const auth = await verifyAdmin();
   if (auth.error) return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
 
-  const { examId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const examId = resolvedParams.examId;
+
 
   // Fetch full exam details
   const { data: exam, error: examError } = await supabaseAdmin
@@ -115,11 +119,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ exam
   });
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ examId: string }> }) {
+export async function DELETE(request: Request, { params }: { params: { examId: string } | Promise<{ examId: string }> }) {
   const auth = await verifyAdmin();
   if (auth.error) return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
 
-  const { examId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const examId = resolvedParams.examId;
 
   // Check exam status
   const { data: exam } = await supabaseAdmin
@@ -153,12 +158,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ e
   return NextResponse.json({ success: true, message: 'Draft exam deleted successfully' });
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ examId: string }> }) {
+export async function PATCH(request: Request, { params }: { params: { examId: string } | Promise<{ examId: string }> }) {
   const auth = await verifyAdmin();
   if (auth.error) return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
 
-  const { examId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const examId = resolvedParams.examId;
   const body = await request.json();
+
 
   if (body.action === 'archive') {
     const { error } = await supabaseAdmin

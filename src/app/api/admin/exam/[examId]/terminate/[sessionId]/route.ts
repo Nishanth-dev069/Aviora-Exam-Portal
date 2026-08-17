@@ -7,10 +7,10 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ examId: string; sessionId: string }> }
+  { params }: { params: { examId: string; sessionId: string } | Promise<{ examId: string; sessionId: string }> }
 ) {
   try {
-    const { examId, sessionId } = await params;
+    const { examId, sessionId } = await Promise.resolve(params);
     const cookieStore = await cookies();
     const supabaseAnon = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
