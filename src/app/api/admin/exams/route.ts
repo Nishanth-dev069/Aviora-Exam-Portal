@@ -64,7 +64,13 @@ export async function POST(request: NextRequest) {
   const schedule = body.schedule || {};
   const enrollment = body.enrollment || {};
 
-  const bankId = questions.bank_id || body.bank_id;
+  const sourceBankIds: string[] = Array.isArray(questions.source_bank_ids) && questions.source_bank_ids.length > 0
+    ? questions.source_bank_ids
+    : (Array.isArray(body.source_bank_ids) && body.source_bank_ids.length > 0
+      ? body.source_bank_ids
+      : (questions.bank_id || body.bank_id ? [questions.bank_id || body.bank_id] : []));
+
+  const bankId = sourceBankIds[0] || questions.bank_id || body.bank_id;
   const title = (basicInfo.title || body.title || '').trim();
   const subject = (basicInfo.subject || body.subject || '').trim();
   const examType = basicInfo.type || body.type;
@@ -94,8 +100,8 @@ export async function POST(request: NextRequest) {
     // Step 1: Fetch Questions and Validate Constraints
     const { data: dbQuestions, error: qError } = await supabaseAdmin
       .from('questions')
-      .select('id, difficulty')
-      .eq('bank_id', bankId)
+      .select('id, difficulty, bank_id')
+      .in('bank_id', sourceBankIds)
       .is('deleted_at', null);
 
     if (qError || !dbQuestions) {
@@ -113,11 +119,52 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           error: {
             code: 'VALIDATION_ERROR',
-            message: `Not enough questions in bank. Bank has ${dbQuestions.length}, need ${totalQuestions}.`
+            message: `Not enough questions in bank(s). Selected bank(s) have ${dbQuestions.length}, need ${totalQuestions}.`
           }
         }, { status: 400 });
       }
-      selectedQuestions = shuffle(dbQuestions).slice(0, totalQuestions);
+
+      if (sourceBankIds.length > 1) {
+        // Proportional sampling across multiple banks
+        const bankGroups: Record<string, { id: string, difficulty?: string }[]> = {};
+        for (const q of dbQuestions) {
+          const bId = q.bank_id || bankId;
+          if (!bankGroups[bId]) bankGroups[bId] = [];
+          bankGroups[bId].push(q);
+        }
+
+        const sortedBanks = Object.keys(bankGroups).sort(
+          (a, b) => bankGroups[b].length - bankGroups[a].length
+        );
+
+        let remainingNeeded = totalQuestions;
+        const sampled: { id: string, difficulty?: string }[] = [];
+
+        sortedBanks.forEach((bId, idx) => {
+          const bQuestions = bankGroups[bId];
+          const isLast = idx === sortedBanks.length - 1;
+          const share = isLast
+            ? remainingNeeded
+            : Math.max(1, Math.min(bQuestions.length, Math.floor((bQuestions.length / dbQuestions.length) * totalQuestions)));
+          const toTake = Math.min(share, remainingNeeded, bQuestions.length);
+
+          if (toTake > 0) {
+            sampled.push(...shuffle(bQuestions).slice(0, toTake));
+            remainingNeeded -= toTake;
+          }
+        });
+
+        // If any remaining due to rounding, sample from rest of dbQuestions
+        if (remainingNeeded > 0) {
+          const takenIds = new Set(sampled.map(q => q.id));
+          const leftovers = dbQuestions.filter(q => !takenIds.has(q.id));
+          sampled.push(...shuffle(leftovers).slice(0, remainingNeeded));
+        }
+
+        selectedQuestions = shuffle(sampled);
+      } else {
+        selectedQuestions = shuffle(dbQuestions).slice(0, totalQuestions);
+      }
     } else {
       // Manual difficulty selection
       const easy = dbQuestions.filter(q => (q.difficulty || '').toLowerCase() === 'easy');
@@ -132,7 +179,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           error: {
             code: 'VALIDATION_ERROR',
-            message: `Not enough questions matching requested difficulty counts. (Easy: ${easy.length}/${reqEasy}, Medium: ${medium.length}/${reqMedium}, Hard: ${hard.length}/${reqHard})`
+            message: `Not enough questions matching requested difficulty counts across selected banks. (Easy: ${easy.length}/${reqEasy}, Medium: ${medium.length}/${reqMedium}, Hard: ${hard.length}/${reqHard})`
           }
         }, { status: 400 });
       }
@@ -180,6 +227,7 @@ export async function POST(request: NextRequest) {
         scheduled_at: scheduledAtVal,
         ends_at: endsAtVal,
         settings: {
+          source_bank_ids: sourceBankIds,
           randomize_questions: settings.randomize_questions ?? true,
           randomize_options: settings.randomize_options ?? true,
           fullscreen_required: settings.fullscreen_required ?? true,
@@ -193,6 +241,7 @@ export async function POST(request: NextRequest) {
         created_by: adminUser.id,
         updated_by: adminUser.id
       })
+
       .select()
       .single();
 

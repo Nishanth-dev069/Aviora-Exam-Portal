@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
   let query = supabaseAdmin
     .from('question_banks')
-    .select('id, name, subject, created_at, questions(count)', { count: 'exact' })
+    .select('id, name, subject, chapter, chapter_order, created_at, questions(count)', { count: 'exact' })
     .is('deleted_at', null)
     .is('questions.deleted_at', null); // only count active questions
 
@@ -70,10 +70,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const formattedData = data.map((b: { id: string; name: string; subject: string; created_at: string; questions: { count: number }[] }) => ({
+  const formattedData = data.map((b: { id: string; name: string; subject: string; chapter: string | null; chapter_order: number; created_at: string; questions: { count: number }[] }) => ({
     id: b.id,
     name: b.name,
     subject: b.subject,
+    chapter: b.chapter,
+    chapter_order: b.chapter_order,
     created_at: b.created_at,
     question_count: b.questions[0]?.count || 0
   }));
@@ -84,6 +86,8 @@ export async function GET(request: Request) {
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   subject: z.string().min(1, 'Subject is required'),
+  chapter: z.string().max(200).nullable().optional(),
+  chapter_order: z.number().int().min(0).max(999).optional().default(0),
 });
 
 export async function POST(request: Request) {
@@ -99,10 +103,14 @@ export async function POST(request: Request) {
   }
 
   const { name, subject } = parsed.data;
+  const chapter = parsed.data.chapter?.trim() || null;
+  const chapter_order = parsed.data.chapter_order ?? 0;
 
   const { data, error } = await supabaseAdmin.from('question_banks').insert({
     name,
     subject,
+    chapter,
+    chapter_order,
     created_by: auth.user!.id
   }).select('id').single();
 
@@ -140,17 +148,32 @@ export async function PATCH(request: Request) {
 
   const supabaseAdmin = auth.supabaseAdmin!;
   const body = await request.json();
-  const { id, name, subject } = body;
+  const { id, name, subject, chapter, chapter_order } = body;
 
   if (!id || !name || !subject) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
+  const updatePayload: Record<string, unknown> = {
+    name,
+    subject,
+  };
+
+  if (chapter !== undefined) {
+    updatePayload.chapter = typeof chapter === 'string' ? chapter.trim() || null : null;
+  }
+
+  if (chapter_order !== undefined) {
+    const orderNum = Number(chapter_order);
+    updatePayload.chapter_order = !isNaN(orderNum) && orderNum >= 0 ? Math.floor(orderNum) : 0;
+  }
+
   const { error } = await supabaseAdmin.from('question_banks')
-    .update({ name, subject })
+    .update(updatePayload)
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ message: 'Question Bank updated' });
 }
+

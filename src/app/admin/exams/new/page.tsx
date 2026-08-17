@@ -35,7 +35,9 @@ const basicInfoSchema = z.object({
 });
 
 const questionsSchema = z.object({
-  bank_id: z.string().min(1, 'Please select a question bank'),
+  bank_mode: z.enum(['single', 'multi']).default('single'),
+  bank_id: z.string().optional(),
+  source_bank_ids: z.array(z.string()).default([]),
   count: z.number().min(1, 'Must select at least 1 question'),
   selection_type: z.enum(['Auto', 'Manual']),
   manual_counts: z.object({
@@ -44,6 +46,20 @@ const questionsSchema = z.object({
     hard: z.number().min(0)
   })
 }).superRefine((val, ctx) => {
+  if (val.bank_mode === 'single' && !val.bank_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please select a question bank',
+      path: ['bank_id']
+    });
+  }
+  if (val.bank_mode === 'multi' && (!val.source_bank_ids || val.source_bank_ids.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please select at least one question bank',
+      path: ['source_bank_ids']
+    });
+  }
   if (val.selection_type === 'Manual') {
     const total = (val.manual_counts?.easy || 0) + (val.manual_counts?.medium || 0) + (val.manual_counts?.hard || 0);
     if (total !== val.count) {
@@ -55,6 +71,7 @@ const questionsSchema = z.object({
     }
   }
 });
+
 
 const settingsSchema = z.object({
   randomize_questions: z.boolean(),
@@ -132,6 +149,9 @@ export default function ExamWizardPage() {
         negative_marks_value: 0.25,
       },
       questions: {
+        bank_mode: 'single',
+        bank_id: '',
+        source_bank_ids: [],
         selection_type: 'Auto',
         count: 0,
         manual_counts: { easy: 0, medium: 0, hard: 0 }
@@ -160,11 +180,19 @@ export default function ExamWizardPage() {
 
     // Step 2 specific async DB inventory check
     if (currentStep === 2) {
+      const bankMode = watch('questions.bank_mode') || 'single';
       const bankId = watch('questions.bank_id');
+      const sourceBankIds = watch('questions.source_bank_ids') || [];
       const count = watch('questions.count');
 
-      if (!bankId) {
-        setError('questions.bank_id', { type: 'manual', message: 'Please select a question bank' });
+      const targetBankIds = bankMode === 'single' ? (bankId ? [bankId] : []) : sourceBankIds;
+
+      if (targetBankIds.length === 0) {
+        if (bankMode === 'single') {
+          setError('questions.bank_id', { type: 'manual', message: 'Please select a question bank' });
+        } else {
+          setError('questions.source_bank_ids', { type: 'manual', message: 'Please select at least one question bank' });
+        }
         return;
       }
       if (!count || count <= 0) {
@@ -174,14 +202,22 @@ export default function ExamWizardPage() {
 
       setIsCheckingBank(true);
       try {
-        const res = await fetch(`/api/admin/questions?bankId=${bankId}&pageSize=1`);
-        const data = await res.json();
-        const availableCount = data.count ?? 0;
+        const counts = await Promise.all(
+          targetBankIds.map(id =>
+            fetch(`/api/admin/questions?bankId=${id}&pageSize=1`)
+              .then(res => res.json())
+              .then(data => Number(data.count ?? 0))
+              .catch(() => 0)
+          )
+        );
+        const availableCount = counts.reduce((sum, c) => sum + c, 0);
 
         if (count > availableCount) {
           setError('questions.count', {
             type: 'manual',
-            message: `This bank only has ${availableCount} questions. You requested ${count}.`
+            message: bankMode === 'multi'
+              ? `The selected banks only have ${availableCount} questions combined. You requested ${count}.`
+              : `This bank only has ${availableCount} questions. You requested ${count}.`
           });
           setIsCheckingBank(false);
           return;
@@ -194,6 +230,7 @@ export default function ExamWizardPage() {
         setIsCheckingBank(false);
       }
     }
+
 
     const fieldsToValidate = STEPS[currentStep - 1].fields as ("basic_info" | "questions" | "settings" | "schedule" | "enrollment")[];
     const isStepValid = await trigger(fieldsToValidate);
@@ -229,6 +266,15 @@ export default function ExamWizardPage() {
 
     // Convert local datetime-local strings to proper ISO strings with browser timezone offset
     const payload = JSON.parse(JSON.stringify(data));
+
+    if (payload.questions?.bank_mode === 'multi') {
+      const sourceBankIds: string[] = payload.questions.source_bank_ids || [];
+      payload.questions.bank_id = sourceBankIds[0] || '';
+      payload.questions.source_bank_ids = sourceBankIds;
+    } else if (payload.questions?.bank_id) {
+      payload.questions.source_bank_ids = [payload.questions.bank_id];
+    }
+
     if (payload.basic_info?.type === 'scheduled' && payload.schedule) {
       if (payload.schedule.start_date) {
         const d = new Date(payload.schedule.start_date);

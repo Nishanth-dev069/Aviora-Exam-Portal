@@ -31,9 +31,11 @@ export function StudentNav({ studentName, photoUrl }: StudentNavProps) {
     { name: 'Dashboard', href: '/dashboard' },
     { name: 'Exams', href: '/exams' },
     { name: 'Results', href: '/results' },
+    { name: 'Learn', href: '/learn' },
     { name: 'Leaderboard', href: '/leaderboard' },
     { name: 'Profile', href: '/profile' },
   ];
+
 
   const initial = (studentName || 'S').charAt(0).toUpperCase();
 

@@ -1,5 +1,5 @@
 -- ============================================================================
--- RPC: rpc_publish_exam
+-- Migration: Create or Replace rpc_publish_exam
 -- Date: 2026-08-17
 -- Description:
 --   Snapshots questions into exam_questions with random sampling:

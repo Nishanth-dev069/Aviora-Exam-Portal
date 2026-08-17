@@ -257,6 +257,25 @@ export default function StudentDashboard() {
         )}
       </section>
 
+      {/* Study Question Banks CTA Section */}
+      <section className="bg-surface border border-border rounded-xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+            <span>📚 Study Question Banks</span>
+          </h2>
+          <p className="text-xs sm:text-sm text-text-secondary mt-1">
+            Browse questions by subject and chapter, with instant answer feedback.
+          </p>
+        </div>
+        <Link
+          href="/learn"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all shadow-xs shrink-0"
+        >
+          <span>Explore Chapters</span>
+          <ChevronRight className="w-4 h-4" />
+        </Link>
+      </section>
+
       {/* Recent Results Section */}
       <section className="space-y-4 min-h-[160px]">
         <div className="flex items-center justify-between">

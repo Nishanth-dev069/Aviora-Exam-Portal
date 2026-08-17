@@ -202,3 +202,45 @@ export interface ClientOption {
   id: string;
   content: string; // NO is_correct field ever sent to client
 }
+
+// ─── Learning Section Types (v2.0) ───────────────────────────────────────────
+
+export interface LearningSubject {
+  subject: string;
+  chapter_count: number;
+  completed_chapters_count?: number;
+  total_questions: number;
+}
+
+export interface LearningChapter {
+  id: string;            // question_banks.id
+  name: string;          // question_banks.name (internal admin label)
+  chapter: string;       // question_banks.chapter (display name for students)
+  chapter_order: number;
+  question_count: number;
+  is_completed?: boolean;
+  completed_at?: string | null;
+}
+
+
+export interface LearningOption {
+  id: string;
+  content: string;
+  is_correct: boolean;   // INTENTIONALLY included — Learning Section sends correct answers
+  display_order: number;
+}
+
+export interface LearningQuestion {
+  id: string;
+  content: string;
+  explanation: string | null;
+  content_image_url?: string | null;
+  explanation_image_url?: string | null;
+  options: LearningOption[];
+}
+
+export interface LearningBankDetail {
+  id: string;
+  chapter: string;
+  subject: string;
+}

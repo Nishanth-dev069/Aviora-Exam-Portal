@@ -62,6 +62,14 @@ export default function Step6_Review() {
           </h3>
           <ul className="space-y-3 text-sm">
             <li className="flex justify-between">
+              <span className="text-text-secondary">Source Mode</span>
+              <span className="font-bold text-text-primary text-right">
+                {data.questions.bank_mode === 'multi' 
+                  ? `Multiple Banks (${data.questions.source_bank_ids?.length || 0} selected)` 
+                  : 'Single Bank'}
+              </span>
+            </li>
+            <li className="flex justify-between">
               <span className="text-text-secondary">Total Questions</span>
               <span className="font-bold text-text-primary text-right">{data.questions.count}</span>
             </li>

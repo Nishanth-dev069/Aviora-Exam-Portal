@@ -12,26 +12,45 @@ import { Skeleton } from '@/components/ui/Skeleton';
 const createBankSchema = z.object({
   name: z.string().min(1, 'Bank name is required'),
   subject: z.string().min(1, 'Subject is required'),
+  chapter: z.string().max(200).optional(),
+  chapter_order: z.number().int().min(0, 'Must be 0 or greater').max(999).optional(),
 });
 type BankFormData = z.infer<typeof createBankSchema>;
 
 function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
-    resolver: zodResolver(createBankSchema)
+    resolver: zodResolver(createBankSchema),
+    defaultValues: {
+      name: '',
+      subject: '',
+      chapter: '',
+      chapter_order: 0,
+    }
   });
 
-  useEffect(() => { if (isOpen) { reset(); setServerError(null); } }, [isOpen, reset]);
+  useEffect(() => { 
+    if (isOpen) { 
+      reset({ name: '', subject: '', chapter: '', chapter_order: 0 }); 
+      setServerError(null); 
+    } 
+  }, [isOpen, reset]);
 
   if (!isOpen) return null;
 
   const onSubmit = async (data: BankFormData) => {
     setServerError(null);
     try {
+      const payload = {
+        name: data.name,
+        subject: data.subject,
+        chapter: data.chapter?.trim() || null,
+        chapter_order: typeof data.chapter_order === 'number' && !isNaN(data.chapter_order) ? data.chapter_order : 0,
+      };
       const res = await fetch('/api/admin/question-banks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(payload)
       });
       if (!res.ok) {
         const result = await res.json();
@@ -75,6 +94,30 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
             {errors.subject && <p className="text-xs text-danger mt-1">{errors.subject.message}</p>}
           </div>
 
+          <div>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Name (Learning Section)</label>
+            <input 
+              {...register('chapter')}
+              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter ? "border-danger" : "border-border")}
+              placeholder="e.g. ICAO Standards & Annexes"
+            />
+            <p className="text-xs text-text-muted mt-1">Leave empty to hide this bank from students&apos; Study section.</p>
+            {errors.chapter && <p className="text-xs text-danger mt-1">{errors.chapter.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Order</label>
+            <input 
+              type="number"
+              min={0}
+              step={1}
+              {...register('chapter_order', { valueAsNumber: true })}
+              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter_order ? "border-danger" : "border-border")}
+            />
+            <p className="text-xs text-text-muted mt-1">Controls display order within the subject (1 = first).</p>
+            {errors.chapter_order && <p className="text-xs text-danger mt-1">{errors.chapter_order.message}</p>}
+          </div>
+
           <div className="pt-4 flex justify-end gap-3">
             <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-text-secondary hover:text-text-primary font-medium">Cancel</button>
             <button type="submit" disabled={isSubmitting} className="px-6 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2">
@@ -87,7 +130,15 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
   );
 }
 
-export type QuestionBankType = { id: string, name: string, subject: string, question_count: number, created_at: string };
+export type QuestionBankType = { 
+  id: string; 
+  name: string; 
+  subject: string; 
+  chapter?: string | null; 
+  chapter_order?: number; 
+  question_count: number; 
+  created_at: string; 
+};
 
 function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBankType | null, isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null);
@@ -97,7 +148,12 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
 
   useEffect(() => { 
     if (isOpen && bank) { 
-      reset({ name: bank.name, subject: bank.subject }); 
+      reset({ 
+        name: bank.name, 
+        subject: bank.subject,
+        chapter: bank.chapter ?? '',
+        chapter_order: bank.chapter_order ?? 0,
+      }); 
       setServerError(null); 
     } 
   }, [isOpen, bank, reset]);
@@ -107,10 +163,17 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
   const onSubmit = async (data: BankFormData) => {
     setServerError(null);
     try {
+      const payload = {
+        id: bank.id,
+        name: data.name,
+        subject: data.subject,
+        chapter: data.chapter?.trim() || null,
+        chapter_order: typeof data.chapter_order === 'number' && !isNaN(data.chapter_order) ? data.chapter_order : 0,
+      };
       const res = await fetch('/api/admin/question-banks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: bank.id, ...data })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) {
         const result = await res.json();
@@ -150,6 +213,30 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.subject ? "border-danger" : "border-border")}
             />
             {errors.subject && <p className="text-xs text-danger mt-1">{errors.subject.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Name (Learning Section)</label>
+            <input 
+              {...register('chapter')}
+              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter ? "border-danger" : "border-border")}
+              placeholder="e.g. ICAO Standards & Annexes"
+            />
+            <p className="text-xs text-text-muted mt-1">Leave empty to hide this bank from students&apos; Study section.</p>
+            {errors.chapter && <p className="text-xs text-danger mt-1">{errors.chapter.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-text-secondary mb-1">Chapter Order</label>
+            <input 
+              type="number"
+              min={0}
+              step={1}
+              {...register('chapter_order', { valueAsNumber: true })}
+              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.chapter_order ? "border-danger" : "border-border")}
+            />
+            <p className="text-xs text-text-muted mt-1">Controls display order within the subject (1 = first).</p>
+            {errors.chapter_order && <p className="text-xs text-danger mt-1">{errors.chapter_order.message}</p>}
           </div>
 
           <div className="pt-4 flex justify-end gap-3">
