@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Filter, MoreHorizontal, Plus, ChevronLeft, ChevronRight, Loader2, BookOpen, Download, ArrowLeft, Image as ImageIcon } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Plus, ChevronLeft, ChevronRight, Loader2, BookOpen, ArrowLeft, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/Skeleton';
 import Link from 'next/link';
@@ -102,13 +102,6 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
             <p className="text-text-secondary mt-1">Manage and edit questions in this bank.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button 
-              disabled
-              title="Coming soon"
-              className="flex items-center gap-2 bg-surface text-text-muted border border-border px-4 py-2.5 rounded-xl font-semibold cursor-not-allowed shadow-sm"
-            >
-              <Download className="w-4 h-4" /> Import
-            </button>
             <button 
               onClick={() => { setEditingQuestion(null); setIsEditorOpen(true); }}
               className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-primary-hover transition-colors shadow-sm"
