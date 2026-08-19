@@ -95,7 +95,7 @@ export async function GET(request: Request) {
     fallbackQuery = fallbackQuery.range(from, to);
 
     const fallbackRes = await fallbackQuery;
-    data = fallbackRes.data;
+    data = fallbackRes.data as any;
     error = fallbackRes.error;
     count = fallbackRes.count;
   }
@@ -132,7 +132,7 @@ const createQuestionSchema = z.object({
   subject: z.string().min(1, 'Subject is required'),
   topic: z.string().nullable().optional(),
   tags: z.array(z.string()).optional().default([]),
-  explanation: z.string().min(20, 'Explanation must be at least 20 characters — students depend on this'),
+  explanation: z.string().nullable().optional().default(''),
   options: z.array(optionSchema)
     .min(2, 'A question must have at least 2 options')
     .max(6, 'A question can have at most 6 options')
@@ -195,7 +195,7 @@ export async function POST(request: Request) {
           subject,
           topic: topic || null,
           tags,
-          explanation,
+          explanation: explanation || null,
           updated_by: adminUser.id,
           updated_at: new Date().toISOString()
         })
@@ -254,7 +254,7 @@ export async function POST(request: Request) {
       }
 
       // Step 3: Delete removed options (if any option was removed in editor)
-      const idsToDelete = [...existingIds].filter(optId => !keepIds.has(optId));
+      const idsToDelete = Array.from(existingIds).filter(optId => !keepIds.has(optId));
       if (idsToDelete.length > 0) {
         try {
           await supabaseAdmin
@@ -289,7 +289,7 @@ export async function POST(request: Request) {
           subject,
           topic: topic || null,
           tags,
-          explanation,
+          explanation: explanation || null,
           created_by: adminUser.id,
           updated_by: adminUser.id
         })

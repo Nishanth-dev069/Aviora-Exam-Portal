@@ -11,7 +11,7 @@ export interface ComputeResultInput {
     content: string;
     content_image_url?: string | null;
     explanation_image_url?: string | null;
-    explanation: string;
+    explanation?: string | null;
     options: {
       id: string;
       content: string;
@@ -49,7 +49,7 @@ export interface ComputedResult {
       is_correct: boolean;
       is_unanswered: boolean;
       marks_awarded: number;
-      explanation: string;
+      explanation?: string | null;
       time_spent_seconds: number;
     }[];
   };

@@ -20,7 +20,7 @@ export type QuestionType = {
   topic: string;
   difficulty: string;
   tags: string[];
-  explanation: string;
+  explanation?: string | null;
   content_image_url?: string | null;
   explanation_image_url?: string | null;
   question_options: { id: string; text: string; is_correct: boolean }[];

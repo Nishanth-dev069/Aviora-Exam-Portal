@@ -38,7 +38,7 @@ type QuestionItem = {
     difficulty: string;
     subject: string;
     topic: string | null;
-    explanation: string;
+    explanation?: string | null;
   };
 };
 

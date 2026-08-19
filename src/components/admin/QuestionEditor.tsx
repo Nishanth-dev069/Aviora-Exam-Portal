@@ -24,7 +24,7 @@ const questionSchema = z.object({
   topic: z.string().optional().nullable(),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   text: z.string().min(10, 'Question text must be at least 10 characters'),
-  explanation: z.string().min(20, 'Explanation must be at least 20 characters — students depend on this'),
+  explanation: z.string().optional(),
   options: z.array(optionSchema)
     .min(2, 'A question must have at least 2 options')
     .max(6, 'A question can have at most 6 options')
@@ -37,7 +37,7 @@ type QuestionFormData = z.infer<typeof questionSchema>;
 
 interface Props {
   isOpen: boolean;
-  question: { id: string, subject: string, topic?: string | null, difficulty: string, text?: string, content?: string, explanation: string, content_image_url?: string | null, explanation_image_url?: string | null, question_options: { id: string, text?: string, content?: string, is_correct: boolean }[] } | null;
+  question: { id: string, subject: string, topic?: string | null, difficulty: string, text?: string, content?: string, explanation?: string | null, content_image_url?: string | null, explanation_image_url?: string | null, question_options: { id: string, text?: string, content?: string, is_correct: boolean }[] } | null;
   bankId: string;
   bankSubject: string;
   onClose: () => void;
@@ -58,6 +58,8 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
       bank_id: bankId,
       subject: bankSubject,
       difficulty: 'medium',
+      text: '',
+      explanation: '',
       options: [
         { id: uuidv4(), text: '', is_correct: true },
         { id: uuidv4(), text: '', is_correct: false },
@@ -374,7 +376,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
             <div className="pt-2 border-t border-border space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Explanation <span className="text-red-500">*</span> <span className="text-xs font-normal text-text-muted">(Min 20 characters — shown after submission)</span>
+                  Explanation <span className="text-xs font-normal text-text-muted">(Optional — shown after submission)</span>
                 </label>
                 <textarea 
                   {...register('explanation')}
