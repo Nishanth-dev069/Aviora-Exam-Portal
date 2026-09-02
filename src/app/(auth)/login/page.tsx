@@ -92,10 +92,10 @@ function LoginForm() {
 
   return (
     <div className="h-screen w-screen overflow-hidden grid grid-cols-1 lg:grid-cols-12 bg-slate-50 font-sans">
-      {/* LEFT PANEL: AEROVERSE-Style Aviation & Finance Brand Showcase */}
+      {/* LEFT PANEL: AEROVERSE-Style Aviation & Assessment Brand Showcase */}
       <div className="hidden lg:flex lg:col-span-7 xl:col-span-7 flex-col justify-between p-10 xl:p-14 bg-cover bg-center bg-[url('/login-bg.jpg')] text-white relative overflow-hidden font-sans">
         {/* Soft Light Overlay for Optimal Text Readability & Image Vibrancy */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-slate-950/25 to-slate-950/35 z-0" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/25 to-slate-950/35 z-0" />
 
         {/* Top Right Dot Grid Matrix */}
         <div className="absolute top-8 right-8 z-10 grid grid-cols-6 gap-2 opacity-25">
@@ -106,73 +106,73 @@ function LoginForm() {
 
         {/* Top Header Badge */}
         <div className="relative z-10 space-y-5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-2xs font-semibold uppercase tracking-wider bg-slate-950/40 text-slate-200 border border-slate-700/50 backdrop-blur-sm">
-            <Plane className="w-3.5 h-3.5 text-amber-400" />
-            DGCA EXAMINATION &amp; ASSESSMENT PLATFORM
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-slate-950/40 text-slate-200 border border-slate-700/50 backdrop-blur-sm">
+            <Plane className="w-4 h-4 text-amber-400" />
+            <span>DGCA EXAMINATION &amp; ASSESSMENT PLATFORM</span>
           </div>
 
-          <div className="space-y-1.5">
-            {/* Sleek Medium/Semibold Italic Title */}
-            <div className="flex items-center tracking-tight font-semibold italic text-4xl sm:text-5xl text-white drop-shadow-sm">
+          <div className="space-y-2">
+            {/* Sleek Semibold Italic Title - Same Thickness, Slightly Larger Size */}
+            <div className="flex items-center tracking-tight font-semibold italic text-5xl sm:text-6xl text-white drop-shadow-sm">
               <span>AERO</span>
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-amber-500">
                 VERSE
               </span>
             </div>
 
-            {/* Refined Thin Tagline matching reference image */}
-            <p className="text-2xs sm:text-xs font-medium italic text-amber-300/85 tracking-[0.35em] uppercase pt-0.5">
+            {/* Refined Thin Tagline */}
+            <p className="text-xs sm:text-sm font-medium italic text-amber-300/85 tracking-[0.35em] uppercase pt-0.5">
               ELEVATE. EXAMINE. EXCEL.
             </p>
 
-            <p className="text-2xs sm:text-xs text-slate-300/85 leading-relaxed font-normal max-w-sm pt-2">
+            <p className="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-normal max-w-md pt-2">
               A next-generation DGCA examination portal built for aspiring aviators. Experience real-world test simulations, intelligent analytics, and seamless performance tracking.
             </p>
           </div>
         </div>
 
-        {/* 3 Refined Feature Highlight Blocks matching reference design */}
-        <div className="relative z-10 my-4 space-y-3.5 max-w-md">
-          <div className="flex items-start gap-3.5">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-950/40 border border-slate-700/50 flex items-center justify-center shrink-0 text-amber-400 backdrop-blur-sm">
-              <ShieldCheck className="w-4.5 h-4.5" />
+        {/* 3 Refined Feature Highlight Blocks */}
+        <div className="relative z-10 my-4 space-y-4 max-w-lg">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-950/40 border border-slate-700/50 flex items-center justify-center shrink-0 text-amber-400 backdrop-blur-sm shadow-sm">
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-xs sm:text-sm font-semibold text-white">DGCA-Aligned Examinations</h3>
-              <p className="text-2xs sm:text-xs text-slate-300/75 mt-0.5 leading-normal max-w-xs">
+              <h3 className="text-sm sm:text-base font-semibold text-white">DGCA-Aligned Examinations</h3>
+              <p className="text-xs sm:text-sm text-slate-300/80 mt-0.5 leading-relaxed max-w-sm">
                 Precision-engineered tests matching DGCA standards across all subjects and modules.
               </p>
             </div>
           </div>
 
-          <div className="flex items-start gap-3.5">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-950/40 border border-slate-700/50 flex items-center justify-center shrink-0 text-amber-400 backdrop-blur-sm">
-              <BookOpen className="w-4.5 h-4.5" />
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-950/40 border border-slate-700/50 flex items-center justify-center shrink-0 text-amber-400 backdrop-blur-sm shadow-sm">
+              <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-xs sm:text-sm font-semibold text-white">Smart Practice &amp; Prep</h3>
-              <p className="text-2xs sm:text-xs text-slate-300/75 mt-0.5 leading-normal max-w-xs">
+              <h3 className="text-sm sm:text-base font-semibold text-white">Smart Practice &amp; Prep</h3>
+              <p className="text-xs sm:text-sm text-slate-300/80 mt-0.5 leading-relaxed max-w-sm">
                 Extensive subject banks, timed mocks, and topic-wise practice to master every concept.
               </p>
             </div>
           </div>
 
-          <div className="flex items-start gap-3.5">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-950/40 border border-slate-700/50 flex items-center justify-center shrink-0 text-amber-400 backdrop-blur-sm">
-              <BarChart3 className="w-4.5 h-4.5" />
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-950/40 border border-slate-700/50 flex items-center justify-center shrink-0 text-amber-400 backdrop-blur-sm shadow-sm">
+              <BarChart3 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-xs sm:text-sm font-semibold text-white">Performance Intelligence</h3>
-              <p className="text-2xs sm:text-xs text-slate-300/75 mt-0.5 leading-normal max-w-xs">
+              <h3 className="text-sm sm:text-base font-semibold text-white">Performance Intelligence</h3>
+              <p className="text-xs sm:text-sm text-slate-300/80 mt-0.5 leading-relaxed max-w-sm">
                 Detailed analytics, accuracy insights, and leaderboards to track and elevate your performance.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Bottom Lock Pill Badge matching reference design */}
+        {/* Bottom Lock Pill Badge */}
         <div className="relative z-10 pt-1">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-2xs font-medium text-slate-300 bg-slate-950/40 border border-slate-700/50 backdrop-blur-sm">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium text-slate-300 bg-slate-950/40 border border-slate-700/50 backdrop-blur-sm">
             <Lock className="w-3.5 h-3.5 text-amber-400" />
             <span>High-Security &bull; Encrypted &bull; Reliable</span>
           </div>
@@ -301,24 +301,24 @@ function LoginForm() {
             </p>
           </div>
 
-          {/* Right Panel Attribution Footer (Properly Sized ZYXEN Logo) */}
-          <div className="text-center space-y-1.5 pt-2">
-            <p className="text-2xs font-bold text-gray-700">&copy; AVIORA &middot; Aviators Exam System</p>
-            <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
+          {/* Right Panel Attribution Footer (Properly Sized ZYXEN Logo matching mockup) */}
+          <div className="text-center space-y-2 pt-2">
+            <p className="text-xs sm:text-sm font-semibold text-gray-700">&copy; AVIORA &middot; Aviators Exam System</p>
+            <div className="flex items-center justify-center gap-2 text-sm sm:text-base font-medium text-slate-700">
               <span>Developed &amp; maintained by</span>
               <a
                 href="https://zyxen.in/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 font-bold text-gray-900 hover:text-[#0f4383] transition-colors"
+                className="inline-flex items-center gap-2 font-bold text-slate-900 hover:text-[#0f4383] transition-colors"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/zyxen-logo.jpeg"
                   alt="ZYXEN"
-                  className="w-4 h-4 aspect-square object-contain bg-black p-0.5 rounded shrink-0"
+                  className="w-6 h-6 sm:w-7 sm:h-7 aspect-square object-contain bg-black p-0.5 rounded-xs shrink-0 shadow-xs"
                 />
-                <span className="font-extrabold text-xs">ZYXEN</span>
+                <span className="font-extrabold text-base sm:text-lg tracking-wide text-[#0b2545]">ZYXEN</span>
               </a>
             </div>
           </div>
