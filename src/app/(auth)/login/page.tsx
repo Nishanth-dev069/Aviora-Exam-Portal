@@ -183,15 +183,18 @@ function LoginForm() {
       <div className="lg:col-span-5 xl:col-span-5 flex flex-col justify-between p-6 sm:p-10 lg:p-12 bg-slate-50 overflow-y-auto lg:overflow-hidden h-full">
         <div className="w-full max-w-md mx-auto my-auto space-y-6">
           {/* Logo Header */}
-          <div className="text-center">
+          <div className="text-center space-y-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/aviora-logo.png"
               alt="AVIORA AVIATION ACADEMY"
-              className="h-32 mx-auto object-contain shrink-0"
+              className="h-28 sm:h-32 mx-auto object-contain shrink-0"
             />
-            <p className="text-xs font-bold tracking-wider text-gray-500 uppercase text-center mt-2">
-              EXAM PORTAL SIGN IN
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight pt-1">
+              Welcome Back, Aviator!
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-500 font-normal">
+              Sign in to continue your journey
             </p>
           </div>
 
