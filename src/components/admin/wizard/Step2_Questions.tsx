@@ -7,7 +7,7 @@ import { Database, AlertCircle, BarChart3, Shuffle, SlidersHorizontal, Loader2, 
 import { cn } from '@/lib/utils';
 
 export default function Step2_Questions() {
-  const { register, watch, setValue, setError, clearErrors, formState: { errors } } = useFormContext<WizardFormData>();
+  const { register, watch, setValue, getValues, setError, clearErrors, formState: { errors } } = useFormContext<WizardFormData>();
   
   const [banks, setBanks] = useState<{ id: string, name: string, subject: string, question_count: number }[]>([]);
   const [bankStats, setBankStats] = useState<{ total: number, easy: number, medium: number, hard: number } | null>(null);
@@ -66,12 +66,13 @@ export default function Step2_Questions() {
         });
 
         // Auto-adjust count if current count is higher than total
-        if (count > allQuestions.length) {
+        const currentCount = getValues('questions.count') || 0;
+        if (currentCount > allQuestions.length) {
           setValue('questions.count', allQuestions.length, { shouldValidate: true });
         }
       })
       .finally(() => setIsLoadingStats(false));
-  }, [bankMode, bankId, sourceBankIds, count, setValue]);
+  }, [bankMode, bankId, sourceBankIds, setValue, getValues]);
 
   // Validation Flags
   let blockProgression = false;

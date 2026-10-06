@@ -16,7 +16,8 @@ interface Props {
 
 export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, currentIndex, answers, onNavigate, onSubmitClick, navigationLocked = false, timerSlot }: Props) {
   const answered = answers.filter(a => a.selected_option_id !== null).length;
-  const marked = answers.filter(a => a.is_marked_for_review).length;
+  const markedUnanswered = answers.filter(a => a.is_marked_for_review && a.selected_option_id === null).length;
+  const markedAnswered = answers.filter(a => a.is_marked_for_review && a.selected_option_id !== null).length;
   const unanswered = questionIds.length - answered;
 
   return (
@@ -42,10 +43,17 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
         </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-warning">
-            <span className="w-2.5 h-2.5 bg-warning"></span>
-            Review
+            <span className="w-2.5 h-2.5 rounded-xs bg-warning"></span>
+            Review (Unanswered)
           </div>
-          <span>({marked})</span>
+          <span>({markedUnanswered})</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-purple-600">
+            <span className="w-2.5 h-2.5 rounded-xs bg-purple-600"></span>
+            Ans &amp; Review
+          </div>
+          <span>({markedAnswered})</span>
         </div>
       </div>
 
@@ -64,15 +72,15 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
                 onClick={() => !navigationLocked && onNavigate(idx)}
                 disabled={navigationLocked}
                 className={cn(
-                  'relative w-9 h-9 rounded-md text-sm font-medium transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  'w-9 h-9 rounded-md text-sm font-medium transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                   isCurrent 
-                    ? 'bg-primary text-white' 
+                    ? 'bg-primary text-white font-bold ring-2 ring-primary ring-offset-1' 
                     : (isAnswered && isReview)
-                      ? 'bg-success text-white border-2 border-warning'
+                      ? 'bg-purple-600 text-white font-semibold'
                       : isReview 
-                        ? 'bg-warning text-white'
+                        ? 'bg-warning text-white font-semibold'
                         : isAnswered 
-                          ? 'bg-success text-white'
+                          ? 'bg-success text-white font-semibold'
                           : isVisited
                             ? 'bg-surface border border-border text-text-muted'
                             : 'bg-white border border-border text-text-muted hover:bg-surface-2',
@@ -80,9 +88,6 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
                 )}
               >
                 {idx + 1}
-                {isAnswered && isReview && !isCurrent && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-warning border border-white" title="Answered & Marked for Review" />
-                )}
               </button>
             );
           })}
