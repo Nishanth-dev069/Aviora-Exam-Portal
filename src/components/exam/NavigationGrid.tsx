@@ -20,11 +20,11 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
   const unanswered = questionIds.length - answered;
 
   return (
-    <div className="flex flex-col h-full w-full bg-surface-2 border-l border-border p-4">
+    <div className="flex flex-col h-full min-h-0 w-full bg-surface-2 border-l border-border p-4">
       
-      {timerSlot && <div>{timerSlot}</div>}
+      {timerSlot && <div className="shrink-0">{timerSlot}</div>}
 
-      <div className="mb-6 space-y-2 text-sm font-medium">
+      <div className="shrink-0 mb-4 space-y-2 text-sm font-medium">
         <h3 className="text-text-secondary uppercase tracking-wider text-xs mb-3">Question Status</h3>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-success">
@@ -49,7 +49,7 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
         <div className="grid grid-cols-5 gap-1.5 place-content-start">
           {questionIds.map((qid, idx) => {
             const answer = answers.find(a => a.question_id === qid);
@@ -64,27 +64,32 @@ export const NavigationGrid = React.memo(function NavigationGrid({ questionIds, 
                 onClick={() => !navigationLocked && onNavigate(idx)}
                 disabled={navigationLocked}
                 className={cn(
-                  'w-9 h-9 rounded-md text-sm font-medium transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  'relative w-9 h-9 rounded-md text-sm font-medium transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                   isCurrent 
                     ? 'bg-primary text-white' 
-                    : isReview 
-                      ? 'bg-warning text-white'
-                      : isAnswered 
-                        ? 'bg-success text-white'
-                        : isVisited
-                          ? 'bg-surface border border-border text-text-muted'
-                          : 'bg-white border border-border text-text-muted hover:bg-surface-2',
+                    : (isAnswered && isReview)
+                      ? 'bg-success text-white border-2 border-warning'
+                      : isReview 
+                        ? 'bg-warning text-white'
+                        : isAnswered 
+                          ? 'bg-success text-white'
+                          : isVisited
+                            ? 'bg-surface border border-border text-text-muted'
+                            : 'bg-white border border-border text-text-muted hover:bg-surface-2',
                   navigationLocked ? 'pointer-events-none opacity-40' : 'cursor-pointer'
                 )}
               >
                 {idx + 1}
+                {isAnswered && isReview && !isCurrent && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-warning border border-white" title="Answered & Marked for Review" />
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="pt-4 mt-auto border-t border-border">
+      <div className="shrink-0 pt-4 mt-auto border-t border-border">
         <button 
           onClick={onSubmitClick}
           className="w-full py-2.5 bg-danger hover:bg-danger-hover text-white text-sm font-semibold rounded-lg shadow-sm transition-colors focus:ring-2 focus:ring-offset-1 focus:ring-danger"

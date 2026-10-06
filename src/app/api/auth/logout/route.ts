@@ -52,14 +52,16 @@ export async function POST(request: NextRequest) {
         .eq('status', 'active');
 
       // Audit log write (fire-and-forget)
-      supabaseAdmin.from('audit_logs').insert({
-        actor_id: user.id,
-        actor_role: 'student',
-        action: 'student.logout',
-        resource_type: 'user',
-        resource_id: user.id,
-        ip_address: request.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1',
-      }).then().catch(console.error);
+      Promise.resolve(
+        supabaseAdmin.from('audit_logs').insert({
+          actor_id: user.id,
+          actor_role: 'student',
+          action: 'student.logout',
+          resource_type: 'user',
+          resource_id: user.id,
+          ip_address: request.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1',
+        })
+      ).catch(console.error);
 
       await supabaseAnon.auth.signOut({ scope: 'local' });
     }

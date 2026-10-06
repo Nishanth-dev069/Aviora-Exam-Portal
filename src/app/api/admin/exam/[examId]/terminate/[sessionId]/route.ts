@@ -56,17 +56,6 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Set status to terminated and record submitted_at
-    const nowIso = new Date().toISOString();
-    await supabaseAdmin
-      .from('exam_sessions')
-      .update({
-        status: 'terminated',
-        submitted_at: nowIso,
-        updated_at: nowIso
-      })
-      .eq('id', sessionId);
-
     // Call submit_exam_session RPC to compute result from saved answers
     const { data: resultData, error: submitErr } = await supabaseAdmin.rpc('submit_exam_session', {
       p_session_id: sessionId,
@@ -79,6 +68,17 @@ export async function POST(
     if (submitErr) {
       console.warn('[Admin Terminate submit_exam_session RPC warning]', submitErr);
     }
+
+    // Set status to terminated and record submitted_at
+    const nowIso = new Date().toISOString();
+    await supabaseAdmin
+      .from('exam_sessions')
+      .update({
+        status: 'terminated',
+        submitted_at: nowIso,
+        updated_at: nowIso
+      })
+      .eq('id', sessionId);
 
     // Write audit log (fire-and-forget)
     void supabaseAdmin.from('audit_logs').insert({

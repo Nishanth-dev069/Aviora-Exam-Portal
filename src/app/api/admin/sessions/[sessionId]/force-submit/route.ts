@@ -50,20 +50,17 @@ export async function POST(
       return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Session not found' } }, { status: 404 });
     }
 
-    if (session.status !== 'active' && session.status !== 'in_progress') {
+    if (['submitted', 'terminated'].includes(session.status)) {
       return NextResponse.json({ error: { code: 'SESSION_NOT_ACTIVE', message: `Session status is '${session.status}' and cannot be force submitted.` } }, { status: 400 });
     }
 
-    // Mark session submitted with timestamp
-    const nowIso = new Date().toISOString();
-    await supabaseAdmin
-      .from('exam_sessions')
-      .update({
-        status: 'submitted',
-        submitted_at: nowIso,
-        updated_at: nowIso
-      })
-      .eq('id', sessionId);
+    // Ensure status is acceptable by submit_exam_session RPC ('active' or 'expired')
+    if (session.status !== 'active' && session.status !== 'expired') {
+      await supabaseAdmin
+        .from('exam_sessions')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', sessionId);
+    }
 
     // Compute result using submit_exam_session RPC
     const { data: resultData, error: submitErr } = await supabaseAdmin.rpc('submit_exam_session', {

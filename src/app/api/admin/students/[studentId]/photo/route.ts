@@ -108,14 +108,16 @@ export async function POST(
       .eq('user_id', params.studentId);
 
     // Audit log (fire and forget)
-    adminClient.from('audit_logs').insert({
-      actor_id: session.user.id,
-      actor_role: caller.role,
-      action: 'admin.student_photo_updated',
-      resource_type: 'student_profile',
-      resource_id: params.studentId,
-      metadata: { storage_path: fullPath },
-    }).then().catch(console.error);
+    Promise.resolve(
+      adminClient.from('audit_logs').insert({
+        actor_id: session.user.id,
+        actor_role: caller.role,
+        action: 'admin.student_photo_updated',
+        resource_type: 'student_profile',
+        resource_id: params.studentId,
+        metadata: { storage_path: fullPath },
+      })
+    ).catch(console.error);
 
     return NextResponse.json({ success: true, storage_path: fullPath });
 

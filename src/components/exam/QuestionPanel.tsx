@@ -35,7 +35,7 @@ export const QuestionPanel = React.memo(function QuestionPanel({
   const isMarked = answer?.is_marked_for_review || false;
 
   return (
-    <div className="flex flex-col h-full max-w-4xl mx-auto w-full p-8 overflow-y-auto custom-scrollbar">
+    <div className="flex flex-col h-full min-h-0 max-w-4xl mx-auto w-full p-8 overflow-y-auto custom-scrollbar">
       
       {/* Question Content */}
       <div className="mb-8">
@@ -93,7 +93,7 @@ export const QuestionPanel = React.memo(function QuestionPanel({
       </div>
 
       {/* Action Bar */}
-      <div className="mt-auto pt-6 border-t border-border flex items-center justify-between">
+      <div className="shrink-0 mt-auto pt-6 border-t border-border flex items-center justify-between">
         
         <button
           onClick={onToggleReview}

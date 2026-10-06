@@ -38,7 +38,7 @@ async function verifyAdmin() {
 
 export async function GET(request: Request) {
   const auth = await verifyAdmin();
-  if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (auth.error || !auth.supabaseAdmin) return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: auth.status || 401 });
 
   const { supabaseAdmin } = auth;
   const { searchParams } = new URL(request.url);

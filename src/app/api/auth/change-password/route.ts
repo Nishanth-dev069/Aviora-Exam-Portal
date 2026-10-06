@@ -81,14 +81,16 @@ export async function POST(request: Request) {
       .eq('id', userId);
 
     // Write audit log (fire-and-forget)
-    supabaseAdmin.from('audit_logs').insert({
-      actor_id: userId,
-      actor_role: authData.user.user_metadata?.role || 'student',
-      action: 'student.password_changed',
-      resource_type: 'user',
-      resource_id: userId,
-      ip_address: ipAddress,
-    }).then().catch(console.error);
+    Promise.resolve(
+      supabaseAdmin.from('audit_logs').insert({
+        actor_id: userId,
+        actor_role: authData.user.user_metadata?.role || 'student',
+        action: 'student.password_changed',
+        resource_type: 'user',
+        resource_id: userId,
+        ip_address: ipAddress,
+      })
+    ).catch(console.error);
 
     return NextResponse.json({ success: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch {

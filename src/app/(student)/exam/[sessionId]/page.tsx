@@ -475,7 +475,7 @@ export default function ExamPage() {
   const stats = {
     total: questions.length,
     answered: answers.filter(a => a.selected_option_id !== null).length,
-    unanswered: answers.filter(a => a.selected_option_id === null && !a.is_marked_for_review).length,
+    unanswered: answers.filter(a => a.selected_option_id === null).length,
     marked: answers.filter(a => a.is_marked_for_review).length,
   };
 

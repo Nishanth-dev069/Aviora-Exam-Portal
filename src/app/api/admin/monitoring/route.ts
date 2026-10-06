@@ -156,14 +156,16 @@ export async function POST(request: Request) {
     if (submitErr) throw submitErr;
 
     // Optimization 3: Fire-and-forget audit log write
-    supabaseAdmin.from('audit_logs').insert({
-      actor_id: adminUser.id,
-      actor_role: 'admin',
-      action: 'admin.force_submit_exam',
-      resource_type: 'exam_session',
-      resource_id: session_id,
-      metadata: { student_id: sessionData.student_id }
-    }).then().catch(console.error);
+    Promise.resolve(
+      supabaseAdmin.from('audit_logs').insert({
+        actor_id: adminUser.id,
+        actor_role: 'admin',
+        action: 'admin.force_submit_exam',
+        resource_type: 'exam_session',
+        resource_id: session_id,
+        metadata: { student_id: sessionData.student_id }
+      })
+    ).catch(console.error);
 
     return NextResponse.json({ success: true, result: resultData });
   } catch (err: unknown) {

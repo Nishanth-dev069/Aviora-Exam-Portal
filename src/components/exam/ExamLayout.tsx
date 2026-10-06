@@ -79,7 +79,7 @@ export const ExamLayout = React.memo(function ExamLayout({
       </header>
 
       {/* Main Content Area */}
-      <main className="relative flex flex-col overflow-hidden bg-background">
+      <main className="relative flex flex-col min-h-0 overflow-hidden bg-background">
         
         {/* Security Warning Banner */}
         {showWarningBanner && (
@@ -104,13 +104,13 @@ export const ExamLayout = React.memo(function ExamLayout({
         )}
 
         {/* Dynamic Question Content */}
-        <div className="flex-1 overflow-hidden relative z-10">
+        <div className="flex-1 min-h-0 overflow-hidden relative z-10">
           {children}
         </div>
       </main>
 
       {/* Sidebar */}
-      <aside className="border-l border-border bg-surface-2 z-10">
+      <aside className="border-l border-border bg-surface-2 z-10 min-h-0 flex flex-col overflow-hidden">
         {sidebar}
       </aside>
 

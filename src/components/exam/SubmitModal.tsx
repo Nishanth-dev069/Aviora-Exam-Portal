@@ -35,6 +35,10 @@ export const SubmitModal = React.memo(function SubmitModal({ isOpen, isSubmittin
             <StatRow label="Marked for Review" value={stats.marked} total={stats.total} color="bg-warning" />
           </div>
 
+          <p className="text-xs text-text-muted bg-surface-2 p-3 rounded-lg border border-border">
+            ℹ Note: Any questions marked for review that have a selected answer will be evaluated and scored normally.
+          </p>
+
           <div className="bg-danger/10 border border-danger/20 rounded-lg p-4 text-sm text-danger flex items-start gap-3">
             <span className="text-lg leading-none">⚠</span>
             <p>Once submitted, you cannot return to this exam. Final answers will be permanently recorded.</p>

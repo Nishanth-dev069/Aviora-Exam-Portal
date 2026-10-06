@@ -49,8 +49,8 @@ export async function POST(
     const { questionId } = await Promise.resolve(params);
 
     const auth = await getAdminClient();
-    if (auth.error) {
-      return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
+    if (auth.error || !auth.supabaseAdmin || !auth.user) {
+      return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error || 'Unauthorized' } }, { status: auth.status || 401 });
     }
 
     const { user, role, supabaseAdmin } = auth;
@@ -68,49 +68,42 @@ export async function POST(
     }
 
     const formData = await request.formData();
-    const file = formData.get('image') as File | null;
-    const imageType = formData.get('image_type') as 'content' | 'explanation' | null;
+    const file = formData.get('file') as File | null;
+    const imageType = (formData.get('image_type') as string) || 'content';
 
-    if (!file || !imageType || !['content', 'explanation'].includes(imageType)) {
-      return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'Provide image file and image_type (content or explanation).' } },
-        { status: 400 }
-      );
+    if (!file) {
+      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'No file provided' } }, { status: 400 });
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'Only JPEG, PNG, and WebP images are allowed.' } },
-        { status: 400 }
-      );
+    if (!['content', 'explanation'].includes(imageType)) {
+      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'image_type must be content or explanation' } }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'File must be under 5MB.' } },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'File exceeds 5MB limit' } }, { status: 400 });
     }
 
-    // Delete old image of this type if exists
-    const oldPath = imageType === 'content'
-      ? question.content_image_url
-      : question.explanation_image_url;
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'File must be JPEG, PNG, or WebP' } }, { status: 400 });
+    }
+
+    // Delete existing file if present
+    const oldPath = imageType === 'content' ? question.content_image_url : question.explanation_image_url;
     if (oldPath) {
       await deleteFile(oldPath).catch(console.error);
     }
 
-    // Upload new file
-    const ext = file.type.split('/')[1].replace('jpeg', 'jpg');
-    const storagePath = `${question.bank_id}/${questionId}/${imageType}.${ext}`;
+    // Upload new image
+    const ext = file.name.split('.').pop() || 'png';
+    const storagePath = `${question.bank_id}/${questionId}/${imageType}-${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
     const fullPath = await uploadFile('question-images', storagePath, buffer, file.type);
 
     if (!fullPath) {
-      return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Upload failed.' } }, { status: 500 });
+      return NextResponse.json({ error: { code: 'UPLOAD_FAILED', message: 'Failed to upload image' } }, { status: 500 });
     }
 
-    // Update questions table
+    // Update question record
     const updateField = imageType === 'content'
       ? { content_image_url: fullPath }
       : { explanation_image_url: fullPath };
@@ -121,14 +114,16 @@ export async function POST(
       .eq('id', questionId);
 
     // Write audit log
-    supabaseAdmin.from('audit_logs').insert({
-      actor_id: user.id,
-      actor_role: role,
-      action: 'admin.question_image_updated',
-      resource_type: 'question',
-      resource_id: questionId,
-      metadata: { image_type: imageType, storage_path: fullPath },
-    }).then().catch(console.error);
+    Promise.resolve(
+      supabaseAdmin.from('audit_logs').insert({
+        actor_id: user.id,
+        actor_role: role,
+        action: 'admin.question_image_updated',
+        resource_type: 'question',
+        resource_id: questionId,
+        metadata: { image_type: imageType, storage_path: fullPath },
+      })
+    ).catch(console.error);
 
     return NextResponse.json({ success: true, storage_path: fullPath });
 
@@ -147,8 +142,8 @@ export async function DELETE(
     const { questionId } = await Promise.resolve(params);
 
     const auth = await getAdminClient();
-    if (auth.error) {
-      return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error } }, { status: auth.status });
+    if (auth.error || !auth.supabaseAdmin) {
+      return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: auth.error || 'Unauthorized' } }, { status: auth.status || 401 });
     }
 
     const { supabaseAdmin } = auth;

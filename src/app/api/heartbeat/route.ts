@@ -54,12 +54,12 @@ export async function POST(req: NextRequest) {
     // Extend session expiry by 24 hours from now (fire-and-forget)
     const nowIso = new Date().toISOString();
     const newExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    supabaseAdmin
-      .from('active_sessions')
-      .update({ last_active_at: nowIso, expires_at: newExpiresAt })
-      .eq('id', activeSession.id)
-      .then()
-      .catch(console.error);
+    Promise.resolve(
+      supabaseAdmin
+        .from('active_sessions')
+        .update({ last_active_at: nowIso, expires_at: newExpiresAt })
+        .eq('id', activeSession.id)
+    ).catch(console.error);
 
     return NextResponse.json({ valid: true, server_time: nowIso });
   } catch (err: unknown) {

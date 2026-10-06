@@ -4,13 +4,15 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+
 export function ClientIdentityTracer() {
   const router = useRouter();
   const prevIdentity = useRef<{ userId: string | null; email: string | null }>({ userId: null, email: null });
 
   useEffect(() => {
     const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       const currentUser = session?.user ?? null;
       const currentUserId = currentUser?.id ?? 'none';
       const currentEmail = currentUser?.email ?? 'N/A';
