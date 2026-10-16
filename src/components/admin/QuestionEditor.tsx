@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -24,7 +25,10 @@ const questionSchema = z.object({
   topic: z.string().optional().nullable(),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   text: z.string().min(10, 'Question text must be at least 10 characters'),
-  explanation: z.string().optional(),
+  explanation: z.string().optional().nullable().refine(
+    (val) => !val || val.trim().length === 0 || val.trim().length >= 20,
+    { message: 'Explanation must be at least 20 characters if provided, or leave it blank' }
+  ),
   options: z.array(optionSchema)
     .min(2, 'A question must have at least 2 options')
     .max(6, 'A question can have at most 6 options')
@@ -75,6 +79,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
   });
 
   const watchOptions = watch('options');
+  const watchExplanation = watch('explanation');
 
   useEffect(() => {
     if (isOpen) {
@@ -92,17 +97,17 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
           difficulty: (question.difficulty?.toLowerCase() as "easy" | "medium" | "hard") || 'medium',
           text: question.text || question.content || '',
           explanation: question.explanation || '',
-          options: question.question_options?.length > 0 
+          options: question.question_options?.length > 0
             ? question.question_options.map(opt => ({
-                id: opt.id,
-                text: opt.text || opt.content || '',
-                content: opt.content || opt.text || '',
-                is_correct: opt.is_correct
-              }))
+              id: opt.id,
+              text: opt.text || opt.content || '',
+              content: opt.content || opt.text || '',
+              is_correct: opt.is_correct
+            }))
             : [
-                { id: uuidv4(), text: '', is_correct: true },
-                { id: uuidv4(), text: '', is_correct: false },
-              ]
+              { id: uuidv4(), text: '', is_correct: true },
+              { id: uuidv4(), text: '', is_correct: false },
+            ]
         });
       } else {
         reset({
@@ -149,7 +154,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
       try {
         const err = text ? JSON.parse(text) : {};
         msg = err.error?.message || msg;
-      } catch {}
+      } catch { }
       throw new Error(msg);
     }
   };
@@ -165,8 +170,13 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
   const onSubmit = async (data: QuestionFormData) => {
     setServerError(null);
     try {
+      const cleanedExplanation = data.explanation && data.explanation.trim().length > 0
+        ? data.explanation.trim()
+        : null;
+
       const payload = {
         ...data,
+        explanation: cleanedExplanation,
         content: data.text,
         options: data.options.map(opt => ({
           ...opt,
@@ -196,8 +206,8 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
           });
           setServerError(result.error.message || 'Please fix the highlighted fields.');
         } else {
-          const errMsg = typeof result.error === 'string' 
-            ? result.error 
+          const errMsg = typeof result.error === 'string'
+            ? result.error
             : result.error?.message || result.message || `Failed to save question (HTTP ${res.status})`;
           setServerError(errMsg);
         }
@@ -234,7 +244,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50 animate-in fade-in duration-200">
       <div className="bg-surface w-full max-w-2xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-        
+
         <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
           <h2 className="text-xl font-bold text-text-primary">
             {question ? 'Edit Question' : 'Add Question'}
@@ -246,7 +256,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
           <form id="question-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            
+
             {serverError && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
@@ -257,7 +267,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Subject</label>
-                <input 
+                <input
                   {...register('subject')}
                   readOnly
                   className="w-full px-4 py-2 bg-surface-2 border border-border rounded-lg text-text-muted cursor-not-allowed"
@@ -267,7 +277,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
                 <label className="block text-sm font-medium text-text-secondary mb-1">
                   Topic <span className="text-gray-400 font-normal text-xs">(Optional)</span>
                 </label>
-                <input 
+                <input
                   {...register('topic')}
                   placeholder="e.g. Navigation & Flight Rules"
                   className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.topic ? "border-red-500 focus:ring-red-500" : "border-border")}
@@ -280,7 +290,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
               <label className="block text-sm font-medium text-text-secondary mb-1">
                 Difficulty <span className="text-red-500">*</span>
               </label>
-              <select 
+              <select
                 {...register('difficulty')}
                 className="w-full px-4 py-2 bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
@@ -296,7 +306,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   Question Text <span className="text-red-500">*</span>
                 </label>
-                <textarea 
+                <textarea
                   {...register('text')}
                   rows={4}
                   className={cn("w-full px-4 py-3 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.text ? "border-red-500 focus:ring-red-500" : "border-border")}
@@ -333,8 +343,8 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
                 {fields.map((field, index) => (
                   <div key={field.id} className="flex items-start gap-3">
                     <div className="pt-3">
-                      <input 
-                        type="radio" 
+                      <input
+                        type="radio"
                         name="correct_option"
                         checked={watchOptions[index]?.is_correct || false}
                         onChange={() => handleSetCorrect(index)}
@@ -342,17 +352,17 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
                       />
                     </div>
                     <div className="flex-1">
-                      <input 
+                      <input
                         {...register(`options.${index}.text`)}
                         className={cn(
-                          "w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", 
+                          "w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50",
                           errors.options?.[index]?.text ? "border-red-500 focus:ring-red-500" : (watchOptions[index]?.is_correct ? "border-emerald-500 bg-emerald-500/5" : "border-border")
                         )}
                         placeholder={`Option ${index + 1}`}
                       />
                       {errors.options?.[index]?.text && <p className="text-xs text-red-600 mt-1 font-medium">{errors.options[index]?.text?.message}</p>}
                     </div>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => remove(index)}
                       disabled={fields.length <= 2}
@@ -365,7 +375,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
               </div>
 
               {fields.length < 6 && (
-                <button 
+                <button
                   type="button"
                   onClick={() => append({ id: uuidv4(), text: '', is_correct: false })}
                   className="mt-3 flex items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"
@@ -377,14 +387,21 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
 
             <div className="pt-2 border-t border-border space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Explanation <span className="text-xs font-normal text-text-muted">(Optional — shown after submission)</span>
-                </label>
-                <textarea 
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-text-secondary">
+                    Explanation <span className="text-xs font-normal text-text-muted">(Optional — min 20 characters if provided)</span>
+                  </label>
+                  {watchExplanation && watchExplanation.trim().length > 0 && watchExplanation.trim().length < 20 && (
+                    <span className="text-xs text-amber-500 font-medium">
+                      {20 - watchExplanation.trim().length} more characters needed
+                    </span>
+                  )}
+                </div>
+                <textarea
                   {...register('explanation')}
                   rows={4}
                   className={cn("w-full px-4 py-3 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.explanation ? "border-red-500 focus:ring-red-500" : "border-border")}
-                  placeholder="Explain why the correct answer is right and why others are wrong..."
+                  placeholder="Explain why the correct answer is right and why others are wrong (at least 20 characters)..."
                 />
                 {errors.explanation && <p className="text-xs text-red-600 mt-1 font-medium">{errors.explanation.message}</p>}
               </div>
@@ -404,14 +421,14 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
         </div>
 
         <div className="p-6 border-t border-border bg-surface-2 flex items-center justify-between flex-shrink-0">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={onClose}
             className="px-5 py-2.5 text-text-secondary hover:text-text-primary font-medium"
           >
             Cancel
           </button>
-          <button 
+          <button
             type="submit"
             form="question-form"
             disabled={isSubmitting || isUploadingImages}

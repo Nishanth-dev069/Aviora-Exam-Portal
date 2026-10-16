@@ -132,9 +132,11 @@ const createQuestionSchema = z.object({
   subject: z.string().min(1, 'Subject is required'),
   topic: z.string().nullable().optional(),
   tags: z.array(z.string()).optional().default([]),
-  explanation: z.string().nullable().optional().default(''),
+  explanation: z.string().nullable().optional().default('').refine(
+    (val) => !val || val.trim().length === 0 || val.trim().length >= 20,
+    { message: 'Explanation must be at least 20 characters if provided, or leave it blank' }
+  ),
   options: z.array(optionSchema)
-    .min(2, 'A question must have at least 2 options')
     .max(6, 'A question can have at most 6 options')
     .refine(
       (opts) => opts.filter(o => o.is_correct).length === 1,
@@ -179,6 +181,7 @@ export async function POST(request: Request) {
     }
 
     const { id, bank_id, content, difficulty, subject, topic, tags, explanation, options } = parsed.data;
+    const cleanExplanation = explanation && explanation.trim().length > 0 ? explanation.trim() : null;
 
     if (id) {
       // UPDATE
@@ -195,13 +198,22 @@ export async function POST(request: Request) {
           subject,
           topic: topic || null,
           tags,
-          explanation: explanation || null,
+          explanation: cleanExplanation,
           updated_by: adminUser.id,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
       if (updateErr) {
+        if (updateErr.message?.includes('questions_explanation_check')) {
+          return NextResponse.json({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Explanation must be at least 20 characters if provided, or leave it blank.',
+              details: [{ field: 'explanation', message: 'Explanation must be at least 20 characters if provided, or leave it blank.' }]
+            }
+          }, { status: 400 });
+        }
         return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: updateErr.message } }, { status: 500 });
       }
 
@@ -289,7 +301,7 @@ export async function POST(request: Request) {
           subject,
           topic: topic || null,
           tags,
-          explanation: explanation || null,
+          explanation: cleanExplanation,
           created_by: adminUser.id,
           updated_by: adminUser.id
         })
@@ -297,6 +309,15 @@ export async function POST(request: Request) {
         .single();
 
       if (createErr || !newQ) {
+        if (createErr?.message?.includes('questions_explanation_check')) {
+          return NextResponse.json({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Explanation must be at least 20 characters if provided, or leave it blank.',
+              details: [{ field: 'explanation', message: 'Explanation must be at least 20 characters if provided, or leave it blank.' }]
+            }
+          }, { status: 400 });
+        }
         return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: createErr?.message || 'Failed to create question' } }, { status: 500 });
       }
 
@@ -329,6 +350,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Question created successfully', id: newQ.id }, { status: 201 });
     }
   } catch (err: any) {
+    if (err?.message?.includes('questions_explanation_check')) {
+      return NextResponse.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Explanation must be at least 20 characters if provided, or leave it blank.',
+          details: [{ field: 'explanation', message: 'Explanation must be at least 20 characters if provided, or leave it blank.' }]
+        }
+      }, { status: 400 });
+    }
     console.error('[POST Questions Error]', err);
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: err.message || 'An unexpected error occurred while saving.' } }, { status: 500 });
   }
