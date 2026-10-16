@@ -136,6 +136,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
 
   const uploadNewImage = async (qId: string, file: File, type: 'content' | 'explanation') => {
     const form = new FormData();
+    form.append('file', file);
     form.append('image', file);
     form.append('image_type', type);
     const res = await fetch(`/api/admin/questions/${qId}/images`, {
@@ -206,6 +207,7 @@ export default function QuestionEditor({ isOpen, question, bankId, bankSubject, 
       const savedQuestionId = data.id || result.id || result.data?.id || (Array.isArray(result.data) ? result.data[0]?.id : null);
 
       if (savedQuestionId) {
+        setValue('id', savedQuestionId);
         setIsUploadingImages(true);
         if (contentImageFile) {
           await uploadNewImage(savedQuestionId, contentImageFile, 'content');

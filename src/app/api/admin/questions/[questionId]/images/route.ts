@@ -68,7 +68,7 @@ export async function POST(
     }
 
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
+    const file = ((formData.get('file') || formData.get('image')) as unknown) as File | null;
     const imageType = (formData.get('image_type') as string) || 'content';
 
     if (!file) {
