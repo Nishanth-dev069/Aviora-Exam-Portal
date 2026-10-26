@@ -44,6 +44,7 @@ export async function GET(request: Request) {
   const page = parseInt(url.searchParams.get('page') || '1', 10);
   const pageSize = parseInt(url.searchParams.get('pageSize') || '10', 10);
   const search = url.searchParams.get('search') || '';
+  const subject = url.searchParams.get('subject') || '';
   
   const sortBy = url.searchParams.get('sortBy') || 'name';
   const sortOrder = url.searchParams.get('sortOrder') || 'asc';
@@ -54,8 +55,16 @@ export async function GET(request: Request) {
     .is('deleted_at', null)
     .is('questions.deleted_at', null); // only count active questions
 
+  if (subject) {
+    query = query.eq('subject', subject);
+  }
+
   if (search) {
-    query = query.or(`name.ilike.%${search}%,subject.ilike.%${search}%`);
+    if (subject) {
+      query = query.ilike('name', `%${search}%`);
+    } else {
+      query = query.or(`name.ilike.%${search}%,subject.ilike.%${search}%`);
+    }
   }
 
   query = query.order(sortBy, { ascending: sortOrder === 'asc' });

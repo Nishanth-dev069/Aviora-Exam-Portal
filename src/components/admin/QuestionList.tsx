@@ -90,8 +90,11 @@ export default function QuestionList({ bankId, bankName, bankSubject }: Props) {
       
       {/* Header */}
       <div className="mb-6">
-        <Link href="/admin/question-banks" className="inline-flex items-center gap-2 text-sm font-bold text-text-muted hover:text-text-primary transition-colors mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back to Question Banks
+        <Link 
+          href={bankSubject ? `/admin/question-banks?subject=${encodeURIComponent(bankSubject)}` : "/admin/question-banks"} 
+          className="inline-flex items-center gap-2 text-sm font-bold text-text-muted hover:text-text-primary transition-colors mb-4"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to {bankSubject ? `${bankSubject} Banks` : 'Question Banks'}
         </Link>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>

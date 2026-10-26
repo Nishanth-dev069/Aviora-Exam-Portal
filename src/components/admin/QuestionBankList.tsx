@@ -1,13 +1,41 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Archive, ChevronLeft, ChevronRight, X, Loader2, Folder, Edit, Globe, Lock } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  Search, 
+  Plus, 
+  Archive, 
+  ChevronLeft, 
+  ChevronRight, 
+  X, 
+  Loader2, 
+  Edit, 
+  Globe, 
+  Lock, 
+  ArrowLeft, 
+  BookOpen 
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Skeleton } from '@/components/ui/Skeleton';
+
+const STANDARD_SUBJECT_METADATA: Record<string, { icon: string; description: string }> = {
+  'Air Law': { icon: '✈️', description: 'Rules of the air, ATC regulations, and aviation conventions.' },
+  'Meteorology': { icon: '🌤️', description: 'Weather systems, forecasts, meteorological reports, and altimetry.' },
+  'Navigation': { icon: '🧭', description: 'Dead reckoning, charts, flight navigation, and calculations.' },
+  'General Navigation': { icon: '🗺️', description: 'Grid navigation, coordinate systems, and maps.' },
+  'Radio Navigation': { icon: '📡', description: 'VOR, DME, ILS, radar, and GNSS systems.' },
+  'Principles of Flight': { icon: '🛫', description: 'Aerodynamics, lift, drag, flight stability, and control.' },
+  'Flight Planning': { icon: '📋', description: 'Fuel calculations, route planning, and flight monitoring.' },
+  'Aircraft General Knowledge': { icon: '🛠️', description: 'Airframe, systems, powerplants, and instrumentation.' },
+  'Human Performance': { icon: '🧬', description: 'Aviation physiology, psychology, and crew resource management.' },
+  'Mass and Balance': { icon: '⚖️', description: 'CG limits, loading calculations, and weight distributions.' },
+  'Operational Procedures': { icon: '📑', description: 'Special procedures, emergency ops, and safety protocols.' },
+  'Communications': { icon: '📻', description: 'VFR and IFR radio communications, phraseology, and signals.' },
+};
 
 const bankFormSchema = z.object({
   name: z.string().min(1, 'Bank name is required'),
@@ -42,14 +70,35 @@ type BankFormData = {
   chapter_order?: number;
 };
 
+export type QuestionBankType = { 
+  id: string; 
+  name: string; 
+  subject: string; 
+  chapter?: string | null; 
+  chapter_order?: number; 
+  question_count: number; 
+  created_at: string; 
+};
 
-function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
+function CreateBankModal({ 
+  isOpen, 
+  onClose, 
+  onSuccess,
+  defaultSubject,
+  availableSubjects = [],
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSuccess: (createdSubject: string) => void; 
+  defaultSubject?: string;
+  availableSubjects?: string[];
+}) {
   const [serverError, setServerError] = useState<string | null>(null);
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
     resolver: zodResolver(bankFormSchema),
     defaultValues: {
       name: '',
-      subject: '',
+      subject: defaultSubject || '',
       is_public: false,
       chapter: '',
       chapter_order: 1,
@@ -60,10 +109,16 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
 
   useEffect(() => { 
     if (isOpen) { 
-      reset({ name: '', subject: '', is_public: false, chapter: '', chapter_order: 1 }); 
+      reset({ 
+        name: '', 
+        subject: defaultSubject || '', 
+        is_public: false, 
+        chapter: '', 
+        chapter_order: 1 
+      }); 
       setServerError(null); 
     } 
-  }, [isOpen, reset]);
+  }, [isOpen, defaultSubject, reset]);
 
   if (!isOpen) return null;
 
@@ -86,7 +141,7 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
         setServerError(result.error || 'Failed to create question bank');
         return;
       }
-      onSuccess();
+      onSuccess(data.subject.trim());
       onClose();
     } catch {
       setServerError('An unexpected error occurred');
@@ -108,18 +163,39 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
             <input 
               {...register('name')}
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.name ? "border-danger" : "border-border")}
-              placeholder="e.g. Air Law Bank"
+              placeholder="e.g. Navigation Basics Bank"
             />
             {errors.name && <p className="text-xs text-danger mt-1">{errors.name.message}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-text-secondary mb-1">Subject <span className="text-danger">*</span></label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-bold text-text-secondary">
+                Subject <span className="text-danger">*</span>
+              </label>
+              {defaultSubject && (
+                <span className="text-[11px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                  Defaulted to active subject
+                </span>
+              )}
+            </div>
             <input 
               {...register('subject')}
-              className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.subject ? "border-danger" : "border-border")}
-              placeholder="e.g. Air Law"
+              readOnly={Boolean(defaultSubject)}
+              list="subjects-datalist"
+              className={cn(
+                "w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50",
+                defaultSubject ? "bg-surface-2 cursor-not-allowed opacity-90 border-border" : (errors.subject ? "border-danger" : "border-border")
+              )}
+              placeholder="e.g. Navigation"
             />
+            {!defaultSubject && availableSubjects.length > 0 && (
+              <datalist id="subjects-datalist">
+                {availableSubjects.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            )}
             {errors.subject && <p className="text-xs text-danger mt-1">{errors.subject.message}</p>}
           </div>
 
@@ -208,17 +284,19 @@ function CreateBankModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
   );
 }
 
-export type QuestionBankType = { 
-  id: string; 
-  name: string; 
-  subject: string; 
-  chapter?: string | null; 
-  chapter_order?: number; 
-  question_count: number; 
-  created_at: string; 
-};
-
-function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBankType | null, isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
+function EditBankModal({ 
+  bank, 
+  isOpen, 
+  onClose, 
+  onSuccess,
+  availableSubjects = [],
+}: { 
+  bank: QuestionBankType | null; 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSuccess: () => void;
+  availableSubjects?: string[];
+}) {
   const [serverError, setServerError] = useState<string | null>(null);
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting }, reset } = useForm<BankFormData>({
     resolver: zodResolver(bankFormSchema)
@@ -292,8 +370,16 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
             <label className="block text-sm font-bold text-text-secondary mb-1">Subject <span className="text-danger">*</span></label>
             <input 
               {...register('subject')}
+              list="edit-subjects-datalist"
               className={cn("w-full px-4 py-2 bg-background border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50", errors.subject ? "border-danger" : "border-border")}
             />
+            {availableSubjects.length > 0 && (
+              <datalist id="edit-subjects-datalist">
+                {availableSubjects.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            )}
             {errors.subject && <p className="text-xs text-danger mt-1">{errors.subject.message}</p>}
           </div>
 
@@ -384,35 +470,49 @@ function EditBankModal({ bank, isOpen, onClose, onSuccess }: { bank: QuestionBan
 
 export default function QuestionBankList() {
   const router = useRouter();
-  const [banks, setBanks] = useState<QuestionBankType[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
+  const searchParams = useSearchParams();
+  const subjectQuery = searchParams.get('subject');
+
+  const [allBanks, setAllBanks] = useState<QuestionBankType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
+
+  // Active subject drilldown
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(subjectQuery || null);
+
+  // Search & Pagination
   const [search, setSearch] = useState('');
-  
+  const [page, setPage] = useState(1);
+  const pageSize = 12; // Same as batches
+
+  // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [bankToEdit, setBankToEdit] = useState<QuestionBankType | null>(null);
+
+  // Keep selectedSubject in sync with URL
+  useEffect(() => {
+    setSelectedSubject(subjectQuery || null);
+    setSearch('');
+    setPage(1);
+  }, [subjectQuery]);
 
   const fetchBanks = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ page: page.toString(), pageSize: pageSize.toString(), search });
-      const res = await fetch(`/api/admin/question-banks?${params}`);
+      const res = await fetch('/api/admin/question-banks?pageSize=1000');
       const data = await res.json();
       if (data.data) {
-        setBanks(data.data);
-        setTotalCount(data.count);
+        setAllBanks(data.data);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoading(false);
     }
-  }, [page, search]);
+  }, []);
 
-  useEffect(() => { fetchBanks(); }, [fetchBanks]);
+  useEffect(() => {
+    fetchBanks();
+  }, [fetchBanks]);
 
   const handleArchive = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -425,150 +525,493 @@ export default function QuestionBankList() {
     }
   };
 
-  const totalPages = Math.ceil(totalCount / pageSize);
+  // Compile Subjects Data
+  const subjectsData = useMemo(() => {
+    const map = new Map<string, {
+      name: string;
+      icon: string;
+      description: string;
+      bankCount: number;
+      questionCount: number;
+      publicCount: number;
+      privateCount: number;
+    }>();
+
+    // Aggregate only from active question banks (no empty subject cards)
+    for (const bank of allBanks) {
+      const sName = (bank.subject || 'General').trim();
+      const key = sName.toLowerCase();
+      const isPublic = Boolean(bank.chapter && bank.chapter.trim());
+      const existing = map.get(key);
+
+      if (existing) {
+        existing.bankCount += 1;
+        existing.questionCount += (bank.question_count || 0);
+        if (isPublic) existing.publicCount += 1;
+        else existing.privateCount += 1;
+      } else {
+        const meta = STANDARD_SUBJECT_METADATA[sName] || {
+          icon: '📚',
+          description: `Question banks and content repository for ${sName}.`,
+        };
+        map.set(key, {
+          name: sName,
+          icon: meta.icon,
+          description: meta.description,
+          bankCount: 1,
+          questionCount: bank.question_count || 0,
+          publicCount: isPublic ? 1 : 0,
+          privateCount: isPublic ? 0 : 1,
+        });
+      }
+    }
+
+    // Sort alphabetically by subject name
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allBanks]);
+
+  const availableSubjectsList = useMemo(() => {
+    const list = Array.from(new Set([
+      ...subjectsData.map(s => s.name),
+      ...Object.keys(STANDARD_SUBJECT_METADATA)
+    ]));
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [subjectsData]);
+
+  // Tier 1: Filtered subjects
+  const filteredSubjects = useMemo(() => {
+    if (!search.trim()) return subjectsData;
+    const q = search.toLowerCase();
+    return subjectsData.filter(s => 
+      s.name.toLowerCase().includes(q) || 
+      s.description.toLowerCase().includes(q)
+    );
+  }, [subjectsData, search]);
+
+  const totalSubjectPages = Math.ceil(filteredSubjects.length / pageSize);
+  const pagedSubjects = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredSubjects.slice(start, start + pageSize);
+  }, [filteredSubjects, page, pageSize]);
+
+  // Tier 2: Filtered banks in selected subject
+  const banksInSelectedSubject = useMemo(() => {
+    if (!selectedSubject) return [];
+    return allBanks.filter(b => b.subject.toLowerCase() === selectedSubject.toLowerCase());
+  }, [allBanks, selectedSubject]);
+
+  const filteredBanks = useMemo(() => {
+    if (!search.trim()) return banksInSelectedSubject;
+    const q = search.toLowerCase();
+    return banksInSelectedSubject.filter(b => 
+      b.name.toLowerCase().includes(q) || 
+      (b.chapter && b.chapter.toLowerCase().includes(q))
+    );
+  }, [banksInSelectedSubject, search]);
+
+  const totalBankPages = Math.ceil(filteredBanks.length / pageSize);
+  const pagedBanks = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredBanks.slice(start, start + pageSize);
+  }, [filteredBanks, page, pageSize]);
+
+  const activeSubjectInfo = useMemo(() => {
+    if (!selectedSubject) return null;
+    return subjectsData.find(s => s.name.toLowerCase() === selectedSubject.toLowerCase()) || {
+      name: selectedSubject,
+      icon: '📚',
+      description: `Question banks for ${selectedSubject}`,
+      bankCount: banksInSelectedSubject.length,
+      questionCount: banksInSelectedSubject.reduce((acc, b) => acc + (b.question_count || 0), 0),
+      publicCount: banksInSelectedSubject.filter(b => Boolean(b.chapter && b.chapter.trim())).length,
+      privateCount: banksInSelectedSubject.filter(b => !b.chapter || !b.chapter.trim()).length,
+    };
+  }, [selectedSubject, subjectsData, banksInSelectedSubject]);
+
+  const handleSelectSubject = (subjectName: string) => {
+    setSelectedSubject(subjectName);
+    setSearch('');
+    setPage(1);
+    router.push(`/admin/question-banks?subject=${encodeURIComponent(subjectName)}`);
+  };
+
+  const handleBackToSubjects = () => {
+    setSelectedSubject(null);
+    setSearch('');
+    setPage(1);
+    router.push('/admin/question-banks');
+  };
+
+  const handleCreateSuccess = (createdSubject: string) => {
+    fetchBanks();
+    if (!selectedSubject && createdSubject) {
+      handleSelectSubject(createdSubject);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full w-full max-w-7xl mx-auto p-4 md:p-8 animate-in fade-in">
       
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-            <Folder className="w-6 h-6 text-primary" />
-            Question Banks
-          </h1>
-          <p className="text-text-secondary mt-1">Manage content repositories for exams.</p>
-        </div>
-        <button 
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-primary-hover transition-colors shadow-sm"
-        >
-          <Plus className="w-5 h-5" /> New Question Bank
-        </button>
-      </div>
-
-      <div className="bg-surface border border-border p-4 rounded-t-xl flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
-        <div className="relative w-full md:w-96">
-          <Search className="w-5 h-5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-          <input 
-            type="text"
-            placeholder="Search banks or subjects..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        </div>
-      </div>
-
-      <div className="bg-surface border-x border-b border-border rounded-b-xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-surface-2 border-b border-border text-xs uppercase tracking-wider text-text-secondary">
-                <th className="px-6 py-4 font-semibold">Name</th>
-                <th className="px-6 py-4 font-semibold">Subject</th>
-                <th className="px-6 py-4 font-semibold">Questions</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 font-semibold w-16"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {isLoading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-44 rounded" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-28 rounded" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-6 w-6 rounded" /></td>
-                  </tr>
-                ))
-              ) : (
-                banks.map((bank) => (
-                <tr 
-                  key={bank.id} 
-                  onClick={() => router.push(`/admin/question-banks/${bank.id}/questions`)}
-                  className="hover:bg-surface-2/50 transition-colors cursor-pointer group"
-                >
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
-                      {bank.name}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-text-secondary font-medium">
-                    {bank.subject}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-text-secondary">
-                    {bank.question_count}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-success/10 text-success">
-                      ● Active
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 relative flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setBankToEdit(bank); }}
-                      title="Edit Bank"
-                      className="p-1.5 text-text-muted hover:text-primary hover:bg-surface-2 rounded-lg transition-colors"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => handleArchive(e, bank.id, bank.name)}
-                      title="Archive Bank"
-                      className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
-                    >
-                      <Archive className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              )))}
-              {!isLoading && banks.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-text-muted">
-                    No question banks found. Click &quot;New Question Bank&quot; to create one.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination footer */}
-        <div className="p-4 border-t border-border flex items-center justify-between text-sm text-text-secondary mt-auto">
-          <span>Total: {totalCount} banks</span>
-          <div className="flex items-center gap-2">
+      {/* LEVEL 1: ALL SUBJECTS VIEW */}
+      {!selectedSubject ? (
+        <>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+                <BookOpen className="w-6 h-6 text-primary" />
+                Question Banks
+              </h1>
+              <p className="text-text-secondary mt-1">
+                Select a subject card to view its question banks, or create a new bank.
+              </p>
+            </div>
             <button 
-              disabled={page <= 1} 
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="p-1.5 border border-border rounded-lg hover:bg-surface-2 disabled:opacity-50"
+              onClick={() => setIsCreateOpen(true)}
+              className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-primary-hover transition-colors shadow-sm"
             >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span>Page {page} of {totalPages || 1}</span>
-            <button 
-              disabled={page >= totalPages} 
-              onClick={() => setPage(p => p + 1)}
-              className="p-1.5 border border-border rounded-lg hover:bg-surface-2 disabled:opacity-50"
-            >
-              <ChevronRight className="w-4 h-4" />
+              <Plus className="w-5 h-5" /> New Question Bank
             </button>
           </div>
-        </div>
 
-      </div>
+          <div className="bg-surface border border-border p-4 rounded-xl mb-6 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
+            <div className="relative w-full md:w-96">
+              <Search className="w-5 h-5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text"
+                placeholder="Search subjects..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div className="text-xs text-text-secondary font-medium">
+              <span>{subjectsData.length} {subjectsData.length === 1 ? 'subject' : 'subjects'} with question banks</span>
+            </div>
+          </div>
 
+          <div className="flex-1 overflow-y-auto min-h-0 relative">
+            {isLoading && allBanks.length > 0 && (
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            )}
+
+            {isLoading && allBanks.length === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-border bg-surface p-6 space-y-4 animate-pulse shadow-sm">
+                    <div className="flex justify-between items-start">
+                      <Skeleton className="h-10 w-10 rounded-xl" />
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </div>
+                    <Skeleton className="h-5 w-3/4 rounded-md" />
+                    <Skeleton className="h-4 w-full rounded-md" />
+                    <div className="pt-4 flex justify-between items-center border-t border-border">
+                      <Skeleton className="h-4 w-24 rounded-md" />
+                      <Skeleton className="h-6 w-12 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
+                {pagedSubjects.map(subj => (
+                  <div 
+                    key={subj.name} 
+                    onClick={() => handleSelectSubject(subj.name)}
+                    className="bg-surface border border-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform shrink-0">
+                          {subj.icon}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
+                            {subj.name}
+                          </h3>
+                          <span className="text-xs text-text-muted">
+                            {subj.bankCount} {subj.bankCount === 1 ? 'question bank' : 'question banks'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-2 text-text-muted group-hover:text-primary transition-colors">
+                        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-text-secondary line-clamp-2 mb-6 flex-1">
+                      {subj.description}
+                    </p>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                      <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Total Questions</span>
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-sm font-bold",
+                        subj.questionCount > 0 ? "bg-primary/10 text-primary" : "bg-surface-2 text-text-muted border border-border"
+                      )}>
+                        {subj.questionCount}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+                {filteredSubjects.length === 0 && !isLoading && (
+                  <div className="col-span-full py-16 text-center bg-surface border border-border border-dashed rounded-2xl p-8 space-y-4">
+                    <div className="w-12 h-12 rounded-2xl bg-surface-2 flex items-center justify-center mx-auto text-2xl">
+                      📚
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-text-primary">
+                        {search ? "No subjects found" : "No Question Banks Yet"}
+                      </h3>
+                      <p className="text-sm text-text-muted max-w-sm mx-auto">
+                        {search 
+                          ? `No subjects matched "${search}". Try adjusting your search term.`
+                          : "Get started by creating your first question bank."}
+                      </p>
+                    </div>
+                    {!search && (
+                      <button 
+                        onClick={() => setIsCreateOpen(true)}
+                        className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Create Question Bank
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {filteredSubjects.length > 0 && totalSubjectPages > 1 && (
+            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between flex-shrink-0">
+              <div className="text-sm font-medium text-text-secondary">
+                Page <span className="text-text-primary font-bold">{page}</span> of <span className="text-text-primary font-bold">{totalSubjectPages || 1}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  disabled={page === 1} 
+                  onClick={() => setPage(p => Math.max(1, p - 1))} 
+                  className="p-2 border border-border rounded-lg bg-surface text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button 
+                  disabled={page >= totalSubjectPages} 
+                  onClick={() => setPage(p => p + 1)} 
+                  className="p-2 border border-border rounded-lg bg-surface text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* LEVEL 2: QUESTION BANKS WITHIN SELECTED SUBJECT VIEW */
+        <>
+          <div className="flex flex-col gap-4 mb-8">
+            <button 
+              onClick={handleBackToSubjects}
+              className="inline-flex items-center gap-2 text-sm font-bold text-text-muted hover:text-text-primary transition-colors w-fit"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to All Subjects
+            </button>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-2xl shrink-0">
+                  {activeSubjectInfo?.icon || '📚'}
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+                    {activeSubjectInfo?.name || selectedSubject}
+                  </h1>
+                  <p className="text-text-secondary text-sm mt-0.5">
+                    {activeSubjectInfo?.bankCount || 0} {(activeSubjectInfo?.bankCount === 1 ? 'Question Bank' : 'Question Banks')} • {activeSubjectInfo?.questionCount || 0} Total Questions
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setIsCreateOpen(true)}
+                className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-primary-hover transition-colors shadow-sm"
+              >
+                <Plus className="w-5 h-5" /> New Question Bank
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-surface border border-border p-4 rounded-xl mb-6 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
+            <div className="relative w-full md:w-96">
+              <Search className="w-5 h-5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text"
+                placeholder={`Search ${selectedSubject} banks...`}
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div className="text-xs text-text-muted flex items-center gap-3">
+              <span>Public: <strong className="text-text-primary">{activeSubjectInfo?.publicCount || 0}</strong></span>
+              <span>•</span>
+              <span>Private: <strong className="text-text-primary">{activeSubjectInfo?.privateCount || 0}</strong></span>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-h-0 relative">
+            {isLoading && allBanks.length > 0 && (
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            )}
+
+            {isLoading && allBanks.length === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-border bg-surface p-6 space-y-4 animate-pulse shadow-sm">
+                    <div className="flex justify-between items-start">
+                      <Skeleton className="h-6 w-36 rounded-md" />
+                      <Skeleton className="h-6 w-8 rounded-lg" />
+                    </div>
+                    <Skeleton className="h-4 w-full rounded-md" />
+                    <Skeleton className="h-4 w-2/3 rounded-md" />
+                    <div className="pt-4 flex justify-between items-center border-t border-border">
+                      <Skeleton className="h-4 w-20 rounded-md" />
+                      <Skeleton className="h-6 w-12 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
+                {pagedBanks.map(bank => {
+                  const isPublic = Boolean(bank.chapter && bank.chapter.trim());
+                  return (
+                    <div 
+                      key={bank.id} 
+                      onClick={() => router.push(`/admin/question-banks/${bank.id}/questions`)}
+                      className="bg-surface border border-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col cursor-pointer"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="space-y-1.5 pr-2 flex-1">
+                          <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors line-clamp-1">
+                            {bank.name}
+                          </h3>
+                          <div>
+                            {isPublic ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20">
+                                <Globe className="w-3.5 h-3.5" /> Ch {bank.chapter_order || 1}: {bank.chapter}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-text-muted/10 text-text-muted border border-border">
+                                <Lock className="w-3.5 h-3.5" /> Private (Exam Only)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setBankToEdit(bank); }}
+                            title="Edit Bank"
+                            className="p-2 text-text-muted hover:text-primary hover:bg-surface-2 rounded-lg transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => handleArchive(e, bank.id, bank.name)}
+                            title="Archive Bank"
+                            className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors opacity-80 group-hover:opacity-100"
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-text-muted mb-6 flex-1">
+                        Created on {new Date(bank.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-4 border-t border-border">
+                        <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Questions</span>
+                        <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold">
+                          {bank.question_count}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredBanks.length === 0 && !isLoading && (
+                  <div className="col-span-full py-16 text-center bg-surface border border-border border-dashed rounded-2xl p-8 space-y-4">
+                    <div className="w-12 h-12 rounded-2xl bg-surface-2 flex items-center justify-center mx-auto text-2xl">
+                      📂
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-text-primary">No question banks found</h3>
+                      <p className="text-sm text-text-muted max-w-sm mx-auto">
+                        {search 
+                          ? `No question banks matched "${search}".` 
+                          : `There are currently no question banks created for ${selectedSubject}.`}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setIsCreateOpen(true)}
+                      className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Create Bank for {selectedSubject}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {filteredBanks.length > 0 && totalBankPages > 1 && (
+            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between flex-shrink-0">
+              <div className="text-sm font-medium text-text-secondary">
+                Page <span className="text-text-primary font-bold">{page}</span> of <span className="text-text-primary font-bold">{totalBankPages || 1}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  disabled={page === 1} 
+                  onClick={() => setPage(p => Math.max(1, p - 1))} 
+                  className="p-2 border border-border rounded-lg bg-surface text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button 
+                  disabled={page >= totalBankPages} 
+                  onClick={() => setPage(p => p + 1)} 
+                  className="p-2 border border-border rounded-lg bg-surface text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* CREATE BANK MODAL */}
       <CreateBankModal 
         isOpen={isCreateOpen} 
         onClose={() => setIsCreateOpen(false)} 
-        onSuccess={fetchBanks} 
+        onSuccess={handleCreateSuccess}
+        defaultSubject={selectedSubject || undefined}
+        availableSubjects={availableSubjectsList}
       />
 
+      {/* EDIT BANK MODAL */}
       <EditBankModal 
         bank={bankToEdit} 
-        isOpen={!!bankToEdit} 
+        isOpen={Boolean(bankToEdit)} 
         onClose={() => setBankToEdit(null)} 
-        onSuccess={fetchBanks} 
+        onSuccess={fetchBanks}
+        availableSubjects={availableSubjectsList}
       />
 
     </div>
